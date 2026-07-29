@@ -1,7 +1,7 @@
 const TOTAL_SLOTS = 27;
 const NUM_MIN = 7;
 const NUM_MAX = 10;
-const TURN_TIME_LIMIT = 10.0;
+const TURN_TIME_LIMIT = 8.0;
 
 const VERTICAL_SLOTS = [];
 for (let i = 0; i < 27; i++) {

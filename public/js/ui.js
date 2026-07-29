@@ -124,7 +124,7 @@ function renderScoreBreakdown(state) {
 }
 
 function updateTimerUI(timeLeft) {
-  let percent = Math.max(0, (timeLeft / 10.0) * 100);
+  let percent = Math.max(0, (timeLeft / 8.0) * 100);
   timerBarFillEl.style.width = `${percent}%`;
   timerTextEl.textContent = `${timeLeft.toFixed(1)}s`;
 

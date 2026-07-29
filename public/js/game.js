@@ -29,14 +29,23 @@ function handleCellHover(r, c, isHover) {
   let isSlotEmpty = coords.every(coord => myBoard[coord.r][coord.c] === null);
   if (!isSlotEmpty) return;
 
-  coords.forEach(coord => {
+  let piece = localRoomState.currentPiece;
+  coords.forEach((coord, idx) => {
     let cellIdx = coord.r * 9 + coord.c;
     let cellEl = gridEl.children[cellIdx];
     if (cellEl) {
       if (isHover) {
         cellEl.classList.add('vslot-hover');
+        if (piece && piece[idx] !== undefined) {
+          cellEl.textContent = piece[idx];
+          cellEl.classList.add(`num-${piece[idx]}`, 'preview-num');
+        }
       } else {
         cellEl.classList.remove('vslot-hover');
+        cellEl.textContent = '';
+        if (piece && piece[idx] !== undefined) {
+          cellEl.classList.remove(`num-${piece[idx]}`, 'preview-num');
+        }
       }
     }
   });
