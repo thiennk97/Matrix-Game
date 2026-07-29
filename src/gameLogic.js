@@ -1,5 +1,7 @@
 const { TOTAL_SLOTS, NUM_MIN, NUM_MAX, TURN_TIME_LIMIT } = require('./constants');
 
+const MAX_PLAYERS = 4;
+
 function randomNum() {
   return Math.floor(Math.random() * (NUM_MAX - NUM_MIN + 1)) + NUM_MIN;
 }
@@ -12,26 +14,26 @@ function generateFairPieceDeck() {
   return deck;
 }
 
+function createPlayerState(socketId, name) {
+  return {
+    socketId: socketId,
+    name: name || 'Player',
+    ready: false,
+    board: Array(9).fill(null).map(() => Array(9).fill(null)),
+    score: 0,
+    hasPlacedThisRound: false,
+    matchedLines: []
+  };
+}
+
 function createNewRoomState(roomCode) {
   return {
     roomCode: roomCode,
-    p1SocketId: null,
-    p2SocketId: null,
-    p1Name: 'Player 1 (Host)',
-    p2Name: 'Player 2 (Guest)',
-    p1Ready: false,
-    p2Ready: false,
-    p1Board: Array(9).fill(null).map(() => Array(9).fill(null)),
-    p2Board: Array(9).fill(null).map(() => Array(9).fill(null)),
+    players: [],
     sharedPieceDeck: generateFairPieceDeck(),
     turn: 0,
-    p1Score: 0,
-    p2Score: 0,
-    p1HasPlacedThisRound: false,
-    p2HasPlacedThisRound: false,
-    p1MatchedLines: [],
-    p2MatchedLines: [],
     timeLeft: TURN_TIME_LIMIT,
+    turnTimeLimit: TURN_TIME_LIMIT,
     timerInterval: null,
     isGameStarted: false,
     isGameOver: false
@@ -195,8 +197,10 @@ function calculateScoreForBoard(board) {
 }
 
 module.exports = {
+  MAX_PLAYERS,
   randomNum,
   generateFairPieceDeck,
   createNewRoomState,
+  createPlayerState,
   calculateScoreForBoard
 };

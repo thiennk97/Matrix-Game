@@ -1,25 +1,31 @@
-var myRole = 0;
+var myPlayerIndex = -1;
 var currentRoomCode = '';
 var localRoomState = null;
 var hasJoinedRoom = false;
 
-function getEffectiveRole(state) {
-  if (myRole === 1 || myRole === 2) return myRole;
-  if (state) {
-    if (socket && socket.id && socket.id === state.p1SocketId) return 1;
-    if (socket && socket.id && socket.id === state.p2SocketId) return 2;
+function getMyPlayer(state) {
+  if (!state || !state.players || myPlayerIndex < 0 || myPlayerIndex >= state.players.length) return null;
+  return state.players[myPlayerIndex];
+}
+
+function getMyPlayerBySocket(state) {
+  if (!state || !state.players) return null;
+  if (myPlayerIndex >= 0 && myPlayerIndex < state.players.length) return state.players[myPlayerIndex];
+  // fallback: find by socket id
+  if (socket && socket.id) {
+    let found = state.players.find(p => p.socketId === socket.id);
+    if (found) return found;
   }
-  return 1;
+  return state.players[0] || null;
 }
 
 function handleCellHover(r, c, isHover) {
   if (!localRoomState || !localRoomState.isGameStarted) return;
 
-  let role = getEffectiveRole(localRoomState);
-  let myHasPlaced = role === 1 ? localRoomState.p1HasPlacedThisRound : localRoomState.p2HasPlacedThisRound;
-  if (myHasPlaced) return;
+  let myPlayer = getMyPlayerBySocket(localRoomState);
+  if (!myPlayer || myPlayer.hasPlacedThisRound) return;
 
-  let myBoard = role === 1 ? localRoomState.p1Board : localRoomState.p2Board;
+  let myBoard = myPlayer.board;
   if (!myBoard) return;
 
   let slotIdx = c * 3 + Math.floor(r / 3);
@@ -32,20 +38,20 @@ function handleCellHover(r, c, isHover) {
   let piece = localRoomState.currentPiece;
   coords.forEach((coord, idx) => {
     let cellIdx = coord.r * 9 + coord.c;
-    let cellEl = gridEl.children[cellIdx];
-    if (cellEl) {
+    let pCell = pixiCells[cellIdx];
+    if (pCell) {
       if (isHover) {
-        cellEl.classList.add('vslot-hover');
+        pCell.bg.tint = 0x0284c7; // hover blue
         if (piece && piece[idx] !== undefined) {
-          cellEl.textContent = piece[idx];
-          cellEl.classList.add(`num-${piece[idx]}`, 'preview-num');
+          pCell.text.text = piece[idx];
+          pCell.text.style.fill = '#ffffff';
+          pCell.text.alpha = 0.6;
         }
       } else {
-        cellEl.classList.remove('vslot-hover');
-        cellEl.textContent = '';
-        if (piece && piece[idx] !== undefined) {
-          cellEl.classList.remove(`num-${piece[idx]}`, 'preview-num');
-        }
+        pCell.bg.tint = 0xFFFFFF; // white
+        pCell.text.text = '';
+        pCell.text.style.fill = '#000000';
+        pCell.text.alpha = 1;
       }
     }
   });
@@ -58,17 +64,19 @@ function handleCellClick(r, c) {
       return;
     }
 
-    let role = getEffectiveRole(localRoomState);
-    let myHasPlaced = role === 1 ? localRoomState.p1HasPlacedThisRound : localRoomState.p2HasPlacedThisRound;
-    if (myHasPlaced) {
-      log('⚠️ Bạn đã hạ quân vòng này rồi, hãy chờ hết 10s sang vòng tiếp theo!', 'server');
-      showToast('⏳ Bạn đã hạ quân vòng này rồi! Đang chờ hết 10s...');
+    let myPlayer = getMyPlayerBySocket(localRoomState);
+    if (!myPlayer) {
+      showToast('⚠️ Lỗi: Không tìm thấy dữ liệu người chơi!');
       return;
     }
 
-    let myBoard = role === 1 ? localRoomState.p1Board : localRoomState.p2Board;
+    if (myPlayer.hasPlacedThisRound) {
+      return;
+    }
+
+    let myBoard = myPlayer.board;
     if (!myBoard) {
-      showToast('⚠️ Lỗi: Không tìm thấy dữ liệu bàn cờ (myBoard là undefined). Role: ' + role);
+      showToast('⚠️ Lỗi: Không tìm thấy dữ liệu bàn cờ!');
       return;
     }
 
@@ -113,11 +121,9 @@ function renderPieceDisplay(state) {
   piecePanelLabelEl.style.color = 'var(--matchbox-orange)';
   pieceDisplayEl.className = 'current-piece-vertical';
 
-  let role = getEffectiveRole(state);
-  let myHasPlaced = role === 1 ? state.p1HasPlacedThisRound : state.p2HasPlacedThisRound;
-
-  if (myHasPlaced) {
-    pieceDisplayEl.innerHTML = `<div style="font-size: 0.8rem; color: var(--matchbox-gold); text-align: center;">⏳ Đã hạ quân! Đang chờ hết 10s sang vòng tiếp...</div>`;
+  let myPlayer = getMyPlayerBySocket(state);
+  if (myPlayer && myPlayer.hasPlacedThisRound) {
+    pieceDisplayEl.innerHTML = `<div style="font-size: 0.8rem; color: #a8a29e; text-align: center; font-family: 'Plus Jakarta Sans', sans-serif;">⏳ Đã hạ quân!<br><br>Đang chờ vòng mới...</div>`;
     return;
   }
 
@@ -132,35 +138,44 @@ function renderPieceDisplay(state) {
 function render(state) {
   if (!state) return;
 
-  let role = getEffectiveRole(state);
-  let myBoard = role === 1 ? state.p1Board : state.p2Board;
-  let myHasPlaced = role === 1 ? state.p1HasPlacedThisRound : state.p2HasPlacedThisRound;
-  let myMatchedLines = role === 1 ? state.p1MatchedLines : state.p2MatchedLines;
+  let myPlayer = getMyPlayerBySocket(state);
+  if (!myPlayer) return;
 
-  for (let r = 0; r < 9; r++) {
-    for (let c = 0; c < 9; c++) {
-      let idx = r * 9 + c;
-      let cellEl = gridEl.children[idx];
-      let val = (myBoard && myBoard[r]) ? myBoard[r][c] : null;
+  let myBoard = myPlayer.board;
+  let myHasPlaced = myPlayer.hasPlacedThisRound;
+  let myMatchedLines = myPlayer.matchedLines;
 
-      cellEl.className = 'cell';
+  if (pixiCells && pixiCells.length === 81) {
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        let idx = r * 9 + c;
+        let pCell = pixiCells[idx];
+        let val = (myBoard && myBoard[r]) ? myBoard[r][c] : null;
 
-      if (val !== null) {
-        cellEl.classList.add('has-num', `num-${val}`);
-        cellEl.textContent = val;
-      } else {
-        cellEl.textContent = '';
+        if (val !== null) {
+          pCell.bg.tint = 0x38bdf8; // cyan
+          pCell.text.text = val;
+          pCell.text.style.fill = '#000000';
+          pCell.text.alpha = 1;
+        } else {
+          pCell.bg.tint = 0xFFFFFF;
+          pCell.text.text = '';
+          pCell.text.style.fill = '#000000';
+          pCell.text.alpha = 1;
+        }
       }
     }
-  }
 
-  if (myHasPlaced) {
-    gridEl.classList.add('locked');
-  } else {
-    gridEl.classList.remove('locked');
+    if (!state.isGameStarted || myHasPlaced || state.isGameOver) {
+      pixiGridContainer.interactiveChildren = false;
+      pixiGridContainer.cursor = 'not-allowed';
+    } else {
+      pixiGridContainer.interactiveChildren = true;
+      pixiGridContainer.cursor = 'default';
+    }
   }
 
   renderSVGMatchLines(myMatchedLines || []);
   renderScoreBreakdown(state);
-  renderMiniOpponentBoard(state);
+  renderMiniOpponentBoards(state);
 }

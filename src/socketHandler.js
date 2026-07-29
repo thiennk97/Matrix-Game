@@ -1,5 +1,5 @@
 const { VERTICAL_SLOTS } = require('./constants');
-const { createNewRoomState, generateFairPieceDeck, calculateScoreForBoard } = require('./gameLogic');
+const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreForBoard } = require('./gameLogic');
 const { rooms, getPublicRoomState, startServerTurnTimer } = require('./roomManager');
 
 function registerSocketHandlers(io) {
@@ -8,6 +8,14 @@ function registerSocketHandlers(io) {
 
     socket.on('join_room', ({ roomCode, playerName }) => {
       if (!roomCode) return;
+
+      // Validate: tên bắt buộc
+      playerName = (playerName || '').trim();
+      if (!playerName) {
+        socket.emit('error_message', '⚠️ Bạn phải nhập TÊN trước khi vào phòng!');
+        return;
+      }
+
       roomCode = String(roomCode).trim().toUpperCase();
       socket.join(roomCode);
 
@@ -18,26 +26,43 @@ function registerSocketHandlers(io) {
       const room = rooms[roomCode];
       const activeSockets = io.sockets.adapter.rooms.get(roomCode);
 
-      let p1Alive = activeSockets && room.p1SocketId && activeSockets.has(room.p1SocketId);
-      let p2Alive = activeSockets && room.p2SocketId && activeSockets.has(room.p2SocketId);
-
-      let playerRole = 1;
-      if (room.p1SocketId === socket.id || !p1Alive) {
-        room.p1SocketId = socket.id;
-        if (playerName) room.p1Name = playerName;
-        playerRole = 1;
-      } else if (room.p2SocketId === socket.id || !p2Alive) {
-        room.p2SocketId = socket.id;
-        if (playerName) room.p2Name = playerName;
-        playerRole = 2;
-      } else {
-        socket.emit('error_message', `⚠️ Phòng [${roomCode}] đã đủ 2 người chơi (${room.p1Name} & ${room.p2Name})! Vui lòng tạo hoặc nhập mã phòng khác.`);
+      // Check if this socket already has a slot
+      let existingIdx = room.players.findIndex(p => p.socketId === socket.id);
+      if (existingIdx >= 0) {
+        // Already in room, just update name if provided
+        if (playerName) room.players[existingIdx].name = playerName;
+        socket.emit('assigned_role', { playerIndex: existingIdx, roomCode: roomCode });
+        io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+        console.log(`👥 Socket ${socket.id} rejoined room [${roomCode}] as Player ${existingIdx + 1}`);
         return;
       }
 
-      socket.emit('assigned_role', { role: playerRole, roomCode: roomCode });
+      // Try to take over a disconnected slot first
+      let disconnectedIdx = room.players.findIndex(p => {
+        return !p.socketId || (activeSockets && !activeSockets.has(p.socketId));
+      });
+
+      let playerIndex = -1;
+      if (disconnectedIdx >= 0) {
+        room.players[disconnectedIdx].socketId = socket.id;
+        if (playerName) room.players[disconnectedIdx].name = playerName;
+        playerIndex = disconnectedIdx;
+      } else if (room.players.length < MAX_PLAYERS) {
+        // Add new player
+        let defaultName = playerName || `Player ${room.players.length + 1}`;
+        let newPlayer = createPlayerState(socket.id, defaultName);
+        room.players.push(newPlayer);
+        playerIndex = room.players.length - 1;
+      } else {
+        // Room is full
+        let playerNames = room.players.map(p => p.name).join(', ');
+        socket.emit('error_message', `⚠️ Phòng [${roomCode}] đã đủ ${MAX_PLAYERS} người chơi!\n(${playerNames})\nVui lòng tạo hoặc nhập mã phòng khác.`);
+        return;
+      }
+
+      socket.emit('assigned_role', { playerIndex: playerIndex, roomCode: roomCode });
       io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
-      console.log(`👥 Socket ${socket.id} joined room [${roomCode}] as Player ${playerRole}`);
+      console.log(`👥 Socket ${socket.id} joined room [${roomCode}] as Player ${playerIndex + 1}`);
     });
 
     socket.on('toggle_ready', ({ roomCode }) => {
@@ -46,43 +71,51 @@ function registerSocketHandlers(io) {
       const room = rooms[roomCode];
       if (!room) return;
 
-      if (socket.id === room.p1SocketId) {
-        room.p1Ready = !room.p1Ready;
-      } else if (socket.id === room.p2SocketId) {
-        room.p2Ready = !room.p2Ready;
+      let player = room.players.find(p => p.socketId === socket.id);
+      if (player) {
+        player.ready = !player.ready;
       }
 
       io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
       console.log(`⚡ Socket ${socket.id} toggled ready state in room [${roomCode}]`);
     });
 
-    socket.on('start_game', ({ roomCode }) => {
+    socket.on('start_game', ({ roomCode, turnTimeLimit }) => {
       if (!roomCode) return;
       roomCode = String(roomCode).trim().toUpperCase();
       const room = rooms[roomCode];
       if (!room) return;
 
-      if (socket.id !== room.p1SocketId) {
+      // Only host (player index 0) can start
+      if (room.players.length === 0 || socket.id !== room.players[0].socketId) {
         socket.emit('error_message', '❌ Chỉ Host (Player 1) mới có quyền Bắt đầu trận đấu!');
         return;
       }
 
+      // Set configurable turn time limit (validate allowed values)
+      const ALLOWED_TIMES = [5, 8, 10, 15];
+      if (turnTimeLimit && ALLOWED_TIMES.includes(Number(turnTimeLimit))) {
+        room.turnTimeLimit = Number(turnTimeLimit);
+      } else {
+        room.turnTimeLimit = 8;
+      }
+
       room.isGameStarted = true;
-      room.p1Board = Array(9).fill(null).map(() => Array(9).fill(null));
-      room.p2Board = Array(9).fill(null).map(() => Array(9).fill(null));
       room.turn = 0;
-      room.p1Score = 0;
-      room.p2Score = 0;
-      room.p1HasPlacedThisRound = false;
-      room.p2HasPlacedThisRound = false;
-      room.p1MatchedLines = [];
-      room.p2MatchedLines = [];
       room.sharedPieceDeck = generateFairPieceDeck();
       room.isGameOver = false;
 
+      // Reset all players' boards and scores
+      room.players.forEach(p => {
+        p.board = Array(9).fill(null).map(() => Array(9).fill(null));
+        p.score = 0;
+        p.hasPlacedThisRound = false;
+        p.matchedLines = [];
+      });
+
       io.to(roomCode).emit('game_started');
       startServerTurnTimer(io, roomCode);
-      console.log(`🚀 Game started in Room [${roomCode}]`);
+      console.log(`🚀 Game started in Room [${roomCode}] with ${room.players.length} players, timer=${room.turnTimeLimit}s`);
     });
 
     socket.on('make_move', ({ roomCode, slotIdx }) => {
@@ -106,18 +139,16 @@ function registerSocketHandlers(io) {
         return;
       }
 
-      let playerRole = 0;
-      if (socket.id === room.p1SocketId) playerRole = 1;
-      else if (socket.id === room.p2SocketId) playerRole = 2;
-
-      if (playerRole === 0) {
+      let playerIndex = room.players.findIndex(p => p.socketId === socket.id);
+      if (playerIndex < 0) {
         socket.emit('error_message', '⚠️ Socket của bạn chưa được gán vai trò trong phòng!');
-        console.log(`⚠️ Socket ${socket.id} attempted move in [${roomCode}] but has role 0`);
+        console.log(`⚠️ Socket ${socket.id} attempted move in [${roomCode}] but has no player slot`);
         return;
       }
 
-      let hasPlaced = playerRole === 1 ? room.p1HasPlacedThisRound : room.p2HasPlacedThisRound;
-      if (hasPlaced) {
+      let player = room.players[playerIndex];
+
+      if (player.hasPlacedThisRound) {
         socket.emit('error_message', '⚠️ Bạn đã đặt quân ở vòng này rồi!');
         return;
       }
@@ -128,9 +159,8 @@ function registerSocketHandlers(io) {
         return;
       }
 
-      let targetBoard = playerRole === 1 ? room.p1Board : room.p2Board;
       let coords = VERTICAL_SLOTS[slotIdx];
-      let isSlotEmpty = coords.every(coord => targetBoard[coord.r][coord.c] === null);
+      let isSlotEmpty = coords.every(coord => player.board[coord.r][coord.c] === null);
       if (!isSlotEmpty) {
         socket.emit('error_message', '⚠️ Vị trí này đã có ô khác chiếm!');
         return;
@@ -139,23 +169,16 @@ function registerSocketHandlers(io) {
       let pieceValues = room.sharedPieceDeck[room.turn];
 
       coords.forEach((coord, idx) => {
-        targetBoard[coord.r][coord.c] = pieceValues[idx];
+        player.board[coord.r][coord.c] = pieceValues[idx];
       });
 
-      if (playerRole === 1) {
-        room.p1HasPlacedThisRound = true;
-        let res = calculateScoreForBoard(room.p1Board);
-        room.p1Score = res.totalScore;
-        room.p1MatchedLines = res.matchLines;
-      } else {
-        room.p2HasPlacedThisRound = true;
-        let res = calculateScoreForBoard(room.p2Board);
-        room.p2Score = res.totalScore;
-        room.p2MatchedLines = res.matchLines;
-      }
+      player.hasPlacedThisRound = true;
+      let res = calculateScoreForBoard(player.board);
+      player.score = res.totalScore;
+      player.matchedLines = res.matchLines;
 
       io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
-      console.log(`🎯 Player ${playerRole} placed piece (slot #${slotIdx}) on their board in Room [${roomCode}]`);
+      console.log(`🎯 Player ${playerIndex + 1} placed piece (slot #${slotIdx}) in Room [${roomCode}]`);
     });
 
     socket.on('disconnect', () => {
@@ -163,16 +186,13 @@ function registerSocketHandlers(io) {
       for (const roomCode in rooms) {
         const room = rooms[roomCode];
         let updated = false;
-        if (room.p1SocketId === socket.id) {
-          room.p1SocketId = null;
-          room.p1Ready = false;
-          updated = true;
-        }
-        if (room.p2SocketId === socket.id) {
-          room.p2SocketId = null;
-          room.p2Ready = false;
-          updated = true;
-        }
+        room.players.forEach(p => {
+          if (p.socketId === socket.id) {
+            p.socketId = null;
+            p.ready = false;
+            updated = true;
+          }
+        });
         if (updated) {
           io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
         }

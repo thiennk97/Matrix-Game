@@ -13,9 +13,9 @@
 
   <style>
     :root {
-      --bg: #0f172a; /* Slate 900 */
-      --card-bg: rgba(30, 41, 59, 0.88); /* Slate 800 */
-      --border: rgba(56, 189, 248, 0.3); /* Sky 400 */
+      --bg: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.88);
+      --border: rgba(56, 189, 248, 0.3);
       --matchbox-orange: #f97316;
       --matchbox-amber: #f59e0b;
       --matchbox-gold: #fcd34d;
@@ -24,11 +24,17 @@
       --matchbox-red: #ef4444;
       --matchbox-cyan: #38bdf8;
       --matchbox-green: #10b981;
+      --matchbox-purple: #a78bfa;
 
       --num-7: #00e5ff;
       --num-8: #ff00ff;
       --num-9: #ffee00;
       --num-10: #ff3c00;
+
+      --p1-color: #f97316;
+      --p2-color: #38bdf8;
+      --p3-color: #a78bfa;
+      --p4-color: #34d399;
     }
 
     * {
@@ -93,7 +99,7 @@
 
     .main-layout {
       display: grid;
-      grid-template-columns: 1fr 350px 300px;
+      grid-template-columns: 1fr 380px;
       gap: 1.2rem;
       padding: 1.2rem 1.5rem;
       max-width: 1650px;
@@ -108,44 +114,58 @@
       gap: 1rem;
     }
 
+    /* Status bar for 4 players */
     .status-bar {
-      display: grid;
-      grid-template-columns: 1fr 180px 1fr;
+      display: flex;
       align-items: center;
+      gap: 0.5rem;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 0.8rem 1.5rem;
+      padding: 0.6rem 1rem;
       backdrop-filter: blur(10px);
     }
 
-    .player-card {
+    .status-players-row {
       display: flex;
+      flex: 1;
+      gap: 0.5rem;
       align-items: center;
-      gap: 1rem;
     }
 
-    .player-card.p2 {
-      flex-direction: row-reverse;
-      text-align: right;
+    .status-player-card {
+      flex: 1;
+      text-align: center;
+      padding: 0.4rem 0.5rem;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.2s ease;
     }
 
-    .player-name {
+    .status-player-card.is-me {
+      background: rgba(249, 115, 22, 0.08);
+      border-color: rgba(249, 115, 22, 0.3);
+      box-shadow: 0 0 10px rgba(249, 115, 22, 0.15);
+    }
+
+    .status-player-name {
       font-weight: 800;
-      font-size: 1.05rem;
+      font-size: 0.78rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .p1-name { color: var(--matchbox-orange); }
-    .p2-name { color: var(--matchbox-cyan); }
-
-    .score-val {
+    .status-player-score {
       font-family: 'Orbitron', sans-serif;
-      font-size: 1.8rem;
+      font-size: 1.4rem;
       font-weight: 900;
     }
 
     .turn-box {
       text-align: center;
+      min-width: 130px;
     }
 
     .turn-label {
@@ -162,13 +182,12 @@
       color: var(--matchbox-cream);
     }
 
-    /* Bàn 9x9 Matchbox Theme */
+    /* Bàn 9x9 */
     .board-wrapper {
-      background: var(--card-bg);
+      background: #f8fafc;
       border: 1.5px solid var(--border);
-      border-radius: 20px;
-      padding: 1.2rem;
-      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 1.5rem;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -177,18 +196,18 @@
 
     .grid-container-relative {
       position: relative;
+      display: flex;
     }
 
     .grid-9x9 {
       display: grid;
       grid-template-columns: repeat(9, 52px);
       grid-template-rows: repeat(9, 52px);
-      gap: 5px;
-      background: #180b03;
-      padding: 12px;
-      border-radius: 16px;
-      border: 1px solid rgba(249, 115, 22, 0.25);
-      box-shadow: inset 0 0 30px rgba(0,0,0,0.9);
+      gap: 1px;
+      background: #000;
+      padding: 2px;
+      border-radius: 2px;
+      border: 2px solid #000;
       transition: opacity 0.3s ease;
     }
 
@@ -203,14 +222,13 @@
       width: 100%;
       height: 100%;
       pointer-events: none;
-      z-index: 10;
+      z-index: 20;
     }
 
     .strike-line {
-      stroke: var(--matchbox-gold);
-      stroke-width: 3px;
+      stroke: var(--matchbox-orange);
+      stroke-width: 5px;
       stroke-linecap: round;
-      filter: drop-shadow(0 0 6px var(--matchbox-orange));
       animation: strikePulse 1s infinite alternate;
     }
 
@@ -225,69 +243,42 @@
     }
 
     .cell {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px dashed rgba(249, 115, 22, 0.15);
-      border-radius: 6px;
+      background: #fff;
+      border: none;
+      border-radius: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 1.25rem;
-      font-weight: 800;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #000;
       cursor: pointer;
-      transition: all 0.2s ease;
       position: relative;
     }
 
-    .cell.vslot-top {
-      border-top: 2px solid var(--matchbox-orange) !important;
-      border-top-left-radius: 10px !important;
-      border-top-right-radius: 10px !important;
-    }
-    .cell.vslot-bottom {
-      border-bottom: 2px solid var(--matchbox-orange) !important;
-      border-bottom-left-radius: 10px !important;
-      border-bottom-right-radius: 10px !important;
-    }
-    .cell.vslot-middle {
-      border-radius: 0px !important;
-    }
-    .cell.vslot-left {
-      border-left: 2px solid var(--matchbox-orange) !important;
-    }
-    .cell.vslot-right {
-      border-right: 2px solid var(--matchbox-orange) !important;
-    }
-
-    .cell.vslot-filled {
-      background: rgba(249, 115, 22, 0.06);
-    }
-
     .cell.vslot-hover {
-      background: rgba(249, 115, 22, 0.35) !important;
-      box-shadow: 0 0 15px var(--matchbox-orange) !important;
+      background: #0284c7 !important;
+      color: #fff !important;
     }
 
     .cell.has-num {
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      animation: popTile 0.2s ease;
       z-index: 15;
     }
 
-    .num-7 { background: rgba(56, 189, 248, 0.22); border-color: var(--num-7); color: var(--num-7); text-shadow: 0 0 8px var(--num-7); }
-    .num-8 { background: rgba(192, 132, 252, 0.22); border-color: var(--num-8); color: var(--num-8); text-shadow: 0 0 8px var(--num-8); }
-    .num-9 { background: rgba(250, 204, 21, 0.22); border-color: var(--num-9); color: var(--num-9); text-shadow: 0 0 8px var(--num-9); }
-    .num-10 { background: rgba(255, 107, 0, 0.3); border-color: var(--num-10); color: var(--num-10); text-shadow: 0 0 10px var(--num-10); }
+    .num-7, .num-8, .num-9, .num-10 { 
+      background: #38bdf8 !important; 
+      color: #000 !important; 
+    }
 
     .piece-panel {
-      background: var(--card-bg);
+      background: #f8fafc;
       border: 1.5px solid var(--border);
-      border-radius: 16px;
-      padding: 0.8rem 1.2rem;
+      border-radius: 12px;
+      padding: 1.5rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      backdrop-filter: blur(10px);
       position: relative;
       overflow: hidden;
     }
@@ -324,57 +315,29 @@
     .current-piece-vertical {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      background: #180b03;
-      padding: 6px;
-      border-radius: 12px;
-      border: 2px solid var(--matchbox-orange);
-      box-shadow: 0 0 15px rgba(249, 115, 22, 0.4);
+      gap: 1px;
+      background: #000;
+      padding: 2px;
+      border-radius: 2px;
+      border: 2px solid #000;
       min-height: 130px;
       justify-content: center;
     }
 
-    .current-piece-horizontal {
-      display: flex;
-      flex-direction: row;
-      gap: 4px;
-      background: #180b03;
-      padding: 6px 12px;
-      border-radius: 12px;
-      border: 2px solid var(--matchbox-cyan);
-      box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-      min-width: 150px;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .cell.hslot-hover {
-      background: rgba(6, 182, 212, 0.35) !important;
-      box-shadow: 0 0 15px var(--matchbox-cyan) !important;
-    }
-
     .piece-box {
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
+      width: 42px;
+      height: 42px;
+      border-radius: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Orbitron', sans-serif;
-      font-size: 1.15rem;
-      font-weight: 900;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      background: #38bdf8;
+      color: #000;
     }
 
-    .score-breakdown-panel {
-      background: var(--card-bg);
-      border: 1.5px solid var(--border);
-      border-radius: 16px;
-      padding: 1.2rem;
-      backdrop-filter: blur(10px);
-      display: flex;
-      flex-direction: column;
-      gap: 0.8rem;
-    }
 
     .panel-title {
       font-family: 'Orbitron', sans-serif;
@@ -387,14 +350,15 @@
       justify-content: space-between;
     }
 
-    .score-comparison-card {
+    /* All-players score grid */
+    .all-players-scores {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+      gap: 8px;
       background: #180b03;
       border: 1.5px solid var(--matchbox-orange);
       border-radius: 12px;
-      padding: 0.8rem 1rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      padding: 0.8rem;
       text-align: center;
       box-shadow: 0 0 15px rgba(249, 115, 22, 0.2);
     }
@@ -403,15 +367,18 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      padding: 0.3rem;
+      border-radius: 8px;
     }
 
     .player-score-item.my-score {
-      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(249, 115, 22, 0.08);
+      border: 1px solid rgba(249, 115, 22, 0.25);
     }
 
     .player-score-val {
       font-family: 'Orbitron', sans-serif;
-      font-size: 1.6rem;
+      font-size: 1.4rem;
       font-weight: 900;
     }
 
@@ -446,21 +413,83 @@
       color: var(--matchbox-gold);
     }
 
-    .sidebar {
+    .right-panel {
       display: flex;
       flex-direction: column;
-      gap: 1.2rem;
+      gap: 0.8rem;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
     }
 
-    .panel-box {
+    .panel-section {
       background: var(--card-bg);
       border: 1.5px solid var(--border);
-      border-radius: 16px;
-      padding: 1.2rem;
+      border-radius: 14px;
+      padding: 0.8rem 1rem;
       backdrop-filter: blur(10px);
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: 0.6rem;
+    }
+
+    .panel-section.compact-info {
+      padding: 0.6rem 0.8rem;
+    }
+
+    /* Opponent mini boards */
+    .opponents-boards-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.6rem;
+    }
+
+    .opponent-board-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .opponent-board-card .ob-name {
+      font-size: 0.72rem;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .opponent-board-card .ob-score {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 900;
+    }
+
+    .mini-grid-9x9 {
+      display: grid;
+      grid-template-columns: repeat(9, 15px);
+      grid-template-rows: repeat(9, 15px);
+      gap: 1px;
+      background: #000;
+      padding: 1px;
+      border-radius: 2px;
+      border: 1px solid #000;
+    }
+
+    .mini-cell {
+      background: #fff;
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.5rem;
+      font-weight: 800;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #000;
     }
 
     .select-input, .text-input {
@@ -510,7 +539,7 @@
     }
 
     .log-box {
-      height: 140px;
+      height: 100px;
       background: #0d0501;
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 8px;
@@ -524,8 +553,6 @@
     }
 
     .log-item { color: #a8a29e; }
-    .log-item.p1 { color: var(--matchbox-orange); }
-    .log-item.p2 { color: var(--matchbox-cyan); }
     .log-item.server { color: var(--matchbox-gold); font-weight: bold; }
 
     /* MODAL PHÒNG CHỜ THI ĐẤU MULTIPLAYER */
@@ -547,7 +574,7 @@
       border-radius: 24px;
       padding: 2rem;
       width: 100%;
-      max-width: 560px;
+      max-width: 620px;
       box-shadow: 0 0 70px rgba(249, 115, 22, 0.35);
       display: flex;
       flex-direction: column;
@@ -580,39 +607,34 @@
       margin-top: 4px;
     }
 
-    /* Player Slots Grid inside Lobby */
+    /* Player Slots Grid inside Lobby - 2x2 for 4 players */
     .lobby-players-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1rem;
+      gap: 0.8rem;
     }
 
     .player-slot-card {
       background: #180b03;
-      border: 1.5px solid rgba(249, 115, 22, 0.25);
+      border: 1.5px solid rgba(255, 255, 255, 0.1);
       border-radius: 14px;
-      padding: 1rem;
+      padding: 0.8rem;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
       text-align: center;
       position: relative;
       transition: all 0.25s ease;
     }
 
-    .player-slot-card.host-slot {
-      border-color: var(--matchbox-orange);
-    }
-    .player-slot-card.guest-slot {
-      border-color: var(--matchbox-cyan);
-    }
-    .player-slot-card.is-me {
-      box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
-    }
+    .player-slot-card.p1-slot { border-color: var(--p1-color); }
+    .player-slot-card.p2-slot { border-color: var(--p2-color); }
+    .player-slot-card.p3-slot { border-color: var(--p3-color); }
+    .player-slot-card.p4-slot { border-color: var(--p4-color); }
 
     .slot-badge {
-      font-size: 0.68rem;
+      font-size: 0.65rem;
       font-weight: 800;
       font-family: 'Orbitron', sans-serif;
       padding: 2px 8px;
@@ -620,20 +642,22 @@
       text-transform: uppercase;
     }
 
-    .slot-badge.p1 { background: rgba(249, 115, 22, 0.2); color: var(--matchbox-orange); border: 1px solid var(--matchbox-orange); }
-    .slot-badge.p2 { background: rgba(6, 182, 212, 0.2); color: var(--matchbox-cyan); border: 1px solid var(--matchbox-cyan); }
+    .slot-badge.p1 { background: rgba(249, 115, 22, 0.2); color: var(--p1-color); border: 1px solid var(--p1-color); }
+    .slot-badge.p2 { background: rgba(56, 189, 248, 0.2); color: var(--p2-color); border: 1px solid var(--p2-color); }
+    .slot-badge.p3 { background: rgba(167, 139, 250, 0.2); color: var(--p3-color); border: 1px solid var(--p3-color); }
+    .slot-badge.p4 { background: rgba(52, 211, 153, 0.2); color: var(--p4-color); border: 1px solid var(--p4-color); }
 
     .slot-player-name {
       font-weight: 800;
-      font-size: 1rem;
+      font-size: 0.9rem;
       color: #fff;
       word-break: break-all;
     }
 
     .status-pill {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 700;
-      padding: 4px 10px;
+      padding: 3px 8px;
       border-radius: 20px;
       display: inline-flex;
       align-items: center;
@@ -645,13 +669,13 @@
     .status-pill.waiting { background: rgba(250, 204, 21, 0.15); color: var(--matchbox-gold); border: 1px solid var(--matchbox-gold); }
 
     .ready-tag {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 800;
       font-family: 'Orbitron', sans-serif;
-      padding: 6px 12px;
+      padding: 5px 10px;
       border-radius: 8px;
       width: 100%;
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
     .ready-tag.is-ready {
@@ -666,30 +690,6 @@
       color: #a8a29e;
     }
 
-    .mini-grid-9x9 {
-      display: grid;
-      grid-template-columns: repeat(9, 20px);
-      grid-template-rows: repeat(9, 20px);
-      gap: 2px;
-      background: #180b03;
-      padding: 6px;
-      border-radius: 10px;
-      border: 1px solid rgba(249, 115, 22, 0.3);
-      justify-content: center;
-      margin: 4px 0;
-    }
-
-    .mini-cell {
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 3px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.65rem;
-      font-weight: 800;
-      font-family: 'Orbitron', sans-serif;
-    }
-
     .toast-banner {
       background: rgba(249, 115, 22, 0.1);
       border: 1px solid var(--matchbox-orange);
@@ -698,9 +698,41 @@
       font-size: 0.82rem;
       color: var(--matchbox-cream);
       text-align: center;
+      line-height: 1.6;
     }
 
-    /* Modal Victory Matchbox Winner */
+    /* Timer select */
+    .timer-select-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #180b03;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.5rem 0.8rem;
+    }
+
+    .timer-select-group label {
+      font-size: 0.75rem;
+      color: #a8a29e;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .timer-select-group select {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--matchbox-gold);
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Modal Victory */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -719,8 +751,84 @@
       border-radius: 20px;
       padding: 2.5rem;
       text-align: center;
-      max-width: 440px;
+      max-width: 520px;
+      width: 100%;
       box-shadow: 0 0 60px rgba(249, 115, 22, 0.4);
+    }
+
+    .modal-card .modal-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 900;
+      color: var(--matchbox-gold);
+      margin-bottom: 1.2rem;
+      text-shadow: 0 0 20px rgba(252, 211, 77, 0.4);
+    }
+
+    /* Ranking cards in victory modal */
+    .rank-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 0.7rem 1rem;
+      border-radius: 12px;
+      border: 1.5px solid;
+      margin-bottom: 0.5rem;
+      text-align: left;
+      transition: all 0.2s ease;
+    }
+
+    .rank-card:first-child {
+      padding: 0.9rem 1.2rem;
+      box-shadow: 0 0 20px rgba(252, 211, 77, 0.2);
+    }
+
+    .rank-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 900;
+      letter-spacing: 1px;
+    }
+
+    .rank-name {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .rank-card:first-child .rank-name {
+      font-size: 1.15rem;
+    }
+
+    .rank-score {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 900;
+    }
+
+    .rank-card:first-child .rank-score {
+      font-size: 1.6rem;
+    }
+
+    .rank-bar-bg {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 3px;
+      margin-top: 3px;
+      overflow: hidden;
+    }
+
+    .rank-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+
+    @keyframes popTile {
+      0% { transform: scale(0.8); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
@@ -732,98 +840,80 @@
       <h1>MATRIX BATTLE <span>REALTIME SERVER ENGINE</span></h1>
     </div>
     <div style="font-size: 0.85rem; color: #a8a29e;">
-      Server Node.js WebSocket RAM Management • Realtime Multi-room 🚀
+      Server Node.js WebSocket • Realtime Multi-room (tối đa 4 người) 🚀
     </div>
   </header>
 
   <div class="main-layout">
     <div class="game-area">
+      <!-- Status bar: dynamic players + turn -->
       <div class="status-bar">
-        <div class="player-card p1">
-          <div>
-            <div class="player-name p1-name" id="p1-name">P1 (Host)</div>
-            <div class="score-val" id="p1-score" style="color: var(--matchbox-orange)">0</div>
-          </div>
+        <div class="status-players-row" id="status-players-row">
+          <!-- Dynamically filled by JS -->
         </div>
-
         <div class="turn-box">
           <div class="turn-label" id="turn-status-text">LƯỢT ĐẶT HIỆN TẠI</div>
           <div class="turn-val" id="turn-val">0 / 27</div>
-        </div>
-
-        <div class="player-card p2">
-          <div>
-            <div class="player-name p2-name" id="p2-name">P2 (Guest)</div>
-            <div class="score-val" id="p2-score" style="color: var(--matchbox-cyan)">0</div>
-          </div>
         </div>
       </div>
 
       <div style="display: flex; gap: 1.5rem; justify-content: center; align-items: stretch; margin-top: 1rem;">
         <div class="board-wrapper">
-          <div class="grid-container-relative">
-            <div class="grid-9x9" id="grid9x9"></div>
-            <svg class="match-lines-svg" id="svgMatchLines"></svg>
-          </div>
+          <div id="pixi-board-container" style="width: 484px; height: 484px; position: relative;"></div>
         </div>
         
-        <div class="piece-panel" style="flex-direction: column; justify-content: center; width: auto; padding: 1.5rem 1rem;">
-          <strong style="color: var(--matchbox-orange); font-size: 0.8rem; margin-bottom: 1rem; text-align: center;" id="piece-panel-label">MẢNH GHÉP<br>(3x1)</strong>
+        <div class="piece-panel" style="flex-direction: column; justify-content: center; width: 130px; min-width: 130px; flex-shrink: 0;">
+          <strong style="color: #333; font-size: 0.9rem; margin-bottom: 1rem; text-align: center; font-family: 'Plus Jakarta Sans', sans-serif;" id="piece-panel-label">Current</strong>
           <div class="current-piece-vertical" id="current-piece-display"></div>
           
           <div class="timer-display-box" style="margin-top: 1.5rem; flex-direction: column; gap: 0.2rem; align-items: center;">
-            <span style="font-size: 0.7rem; color: #a8a29e;">⏳ THỜI GIAN</span>
-            <span id="timer-text-val" style="color: var(--matchbox-gold); font-size: 1.1rem; font-weight: bold;">8.0s</span>
+            <span style="font-size: 0.75rem; color: #666; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700;">⏳ THỜI GIAN</span>
+            <span id="timer-text-val" style="color: #000; font-size: 1.2rem; font-weight: 800; width: 50px; text-align: center; display: inline-block; font-variant-numeric: tabular-nums;">8.0s</span>
           </div>
-          <div class="timer-bar-container" style="position: relative; width: 100%; margin-top: 0.5rem; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,0.1);">
+          <div class="timer-bar-container" style="position: relative; width: 100%; margin-top: 0.5rem; border-radius: 4px; overflow: hidden; background: #e5e7eb;">
             <div class="timer-bar-fill" id="timer-bar-fill"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="score-breakdown-panel">
-      <div class="panel-title">
-        <span>🏆 BẢNG ĐIỂM LIVE SERVER</span>
-        <span style="font-size: 0.75rem; color: var(--matchbox-green)">RAM REALTIME</span>
-      </div>
-
-      <div class="score-comparison-card">
-        <div class="player-score-item my-score">
-          <div style="font-size: 0.7rem; color: var(--matchbox-orange); font-weight: 800;" id="label-my-score">ĐIỂM P1 (HOST)</div>
-          <div class="player-score-val" id="my-live-score" style="color: var(--matchbox-orange);">0</div>
+    <div class="right-panel">
+      <!-- Scores -->
+      <div class="panel-section">
+        <div class="panel-title">
+          <span>🏆 BẢNG ĐIỂM</span>
+          <span style="font-size: 0.75rem; color: var(--matchbox-green)">REALTIME</span>
         </div>
-        <div class="player-score-item">
-          <div style="font-size: 0.7rem; color: var(--matchbox-cyan); font-weight: 800;" id="label-op-score">ĐIỂM P2 (GUEST)</div>
-          <div class="player-score-val" id="op-live-score" style="color: var(--matchbox-cyan);">0</div>
+        <div class="all-players-scores" id="all-players-scores"></div>
+      </div>
+
+      <!-- Opponent mini boards -->
+      <div class="panel-section">
+        <div class="panel-title"><span>👀 BÀN ĐẤU ĐỐI THỦ</span></div>
+        <div class="opponents-boards-container" id="opponents-boards-container">
+          <div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.5rem;">Chưa bắt đầu trận đấu...</div>
         </div>
       </div>
 
-      <div style="font-size: 0.8rem; color: #a8a29e; font-weight: 600; margin-top: 4px;">📊 BÀN ĐẤU ĐỐI THỦ (MINI PREVIEW):</div>
-      <div id="op-mini-board" class="mini-grid-9x9"></div>
-
-      <div style="font-size: 0.8rem; color: #a8a29e; font-weight: 600; margin-top: 4px;">ĐƯỜNG GẠCH NỔ ĐIỂM CỦA BẠN:</div>
-      <div class="match-list" id="match-list-details">
-        <div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 1rem;">Chưa có đường 3 ô kề nhau...</div>
-      </div>
-    </div>
-
-    <div class="sidebar">
-      <div class="panel-box">
-        <div class="panel-title"><span>🎮 PHÒNG ĐẤU HIỆN TẠI</span></div>
-        <div style="font-size: 0.9rem; font-weight: 700; color: var(--matchbox-gold);" id="sidebar-room-info">
-          📍 Phòng: MB-8888 (Chưa vào)
+      <!-- Match breakdown -->
+      <div class="panel-section">
+        <div class="panel-title"><span>💥 ĐƯỜNG NỔ ĐIỂM CỦA BẠN</span></div>
+        <div class="match-list" id="match-list-details">
+          <div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.5rem;">Chưa có đường 3 ô kề nhau...</div>
         </div>
-        <div style="font-size: 0.8rem; color: #a8a29e;" id="sidebar-role-info">
-          👤 Vai trò: Bạn chưa vào phòng
-        </div>
-        <button class="btn" id="btn-open-lobby-modal">🌐 Đổi Phòng / Phòng Chờ</button>
       </div>
 
-      <div class="panel-box">
-        <div class="panel-title"><span>📜 NHẬT KÝ SERVER REALTIME</span></div>
-        <div class="log-box" id="log-box"></div>
+      <!-- Room info + Log -->
+      <div class="panel-section compact-info">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 0.82rem; font-weight: 700; color: var(--matchbox-gold);" id="sidebar-room-info">📍 Phòng: MB-8888</div>
+            <div style="font-size: 0.75rem; color: #a8a29e;" id="sidebar-role-info">👤 Chưa vào phòng</div>
+          </div>
+          <button class="btn" id="btn-open-lobby-modal" style="padding: 0.4rem 0.8rem; font-size: 0.72rem;">🌐 Phòng Chờ</button>
+        </div>
       </div>
+
     </div>
   </div>
 
@@ -832,19 +922,19 @@
     <div class="lobby-card">
       <div class="lobby-header">
         <h2>🔥 MATRIX PONOS BATTLE MULTIPLAYER</h2>
-        <p>Hệ thống kết nối phòng đấu Realtime Node.js Socket.IO</p>
+        <p>Hệ thống kết nối phòng đấu Realtime Node.js Socket.IO (tối đa 4 người)</p>
       </div>
 
       <!-- BANNER THÔNG BÁO CHUNG REALTIME -->
       <div class="toast-banner" id="lobby-status-banner">
-        🟢 Hệ thống sẵn sàng! Nhập tên & mã phòng để tạo hoặc tham gia phòng đấu.
+        🟢 Hệ thống sẵn sàng!<br>Nhập tên & mã phòng để tạo hoặc tham gia phòng đấu.
       </div>
 
-      <!-- VIEW 1: CHƯA VÀO PHÒNG (FORM TẠO / NHẬP PHÒNG) -->
+      <!-- VIEW 1: CHƯA VÀO PHÒNG -->
       <div id="lobby-setup-view" style="display: flex; flex-direction: column; gap: 1rem;">
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <label style="font-size: 0.8rem; color: #a8a29e; font-weight: 700;">TÊN CỦA BẠN:</label>
-          <input type="text" id="player-name-input" class="text-input" value="Player 1" style="font-size: 1rem; text-align: center;">
+          <input type="text" id="player-name-input" class="text-input" placeholder="Nhập tên của bạn..." style="font-size: 1rem; text-align: center;">
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 6px;">
@@ -858,8 +948,8 @@
         <button class="btn btn-cyan" id="btn-join-room" style="padding: 0.9rem; font-size: 1rem;">🔗 THAM GIA / TẠO PHÒNG</button>
       </div>
 
-      <!-- VIEW 2: ĐÃ VÀO PHÒNG (PHÒNG CHỜ LOBBY KHÔNG KHÍ SẴN SÀNG) -->
-      <div id="lobby-room-view" style="display: none; flex-direction: column; gap: 1.2rem;">
+      <!-- VIEW 2: ĐÃ VÀO PHÒNG -->
+      <div id="lobby-room-view" style="display: none; flex-direction: column; gap: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; background: #180b03; border: 1px solid var(--border); border-radius: 12px; padding: 0.6rem 1rem;">
           <div>
             <span style="font-size: 0.75rem; color: #a8a29e;">MÃ PHÒNG:</span>
@@ -871,22 +961,50 @@
           </div>
         </div>
 
+        <!-- 4 Player Slots (2x2 grid) -->
         <div class="lobby-players-grid">
-          <!-- SLOT PLAYER 1 (HOST) -->
-          <div class="player-slot-card host-slot" id="card-p1-slot">
-            <span class="slot-badge p1">P1 (HOST - DỌC)</span>
+          <!-- SLOT P1 (HOST) -->
+          <div class="player-slot-card p1-slot" id="card-p1-slot">
+            <span class="slot-badge p1">P1 (HOST)</span>
             <div class="slot-player-name" id="lobby-p1-name">Chờ Host...</div>
-            <div class="status-pill offline" id="lobby-p1-conn">🔴 Trực tuyến</div>
-            <div class="ready-tag not-ready" id="lobby-p1-ready">CHƯA SẴN SÀNG</div>
+            <div class="status-pill offline" id="lobby-p1-conn">🔴 Ngoại tuyến</div>
+            <div class="ready-tag not-ready" id="lobby-p1-ready">—</div>
           </div>
 
-          <!-- SLOT PLAYER 2 (GUEST) -->
-          <div class="player-slot-card guest-slot" id="card-p2-slot">
-            <span class="slot-badge p2">P2 (GUEST - NGANG)</span>
-            <div class="slot-player-name" id="lobby-p2-name">Chờ Guest...</div>
-            <div class="status-pill waiting" id="lobby-p2-conn">⏳ Chờ người chơi 2</div>
-            <div class="ready-tag not-ready" id="lobby-p2-ready">CHƯA SẴN SÀNG</div>
+          <!-- SLOT P2 -->
+          <div class="player-slot-card p2-slot" id="card-p2-slot">
+            <span class="slot-badge p2">P2</span>
+            <div class="slot-player-name" id="lobby-p2-name">Chờ P2 vào...</div>
+            <div class="status-pill waiting" id="lobby-p2-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p2-ready">—</div>
           </div>
+
+          <!-- SLOT P3 -->
+          <div class="player-slot-card p3-slot" id="card-p3-slot">
+            <span class="slot-badge p3">P3</span>
+            <div class="slot-player-name" id="lobby-p3-name">Chờ P3 vào...</div>
+            <div class="status-pill waiting" id="lobby-p3-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p3-ready">—</div>
+          </div>
+
+          <!-- SLOT P4 -->
+          <div class="player-slot-card p4-slot" id="card-p4-slot">
+            <span class="slot-badge p4">P4</span>
+            <div class="slot-player-name" id="lobby-p4-name">Chờ P4 vào...</div>
+            <div class="status-pill waiting" id="lobby-p4-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p4-ready">—</div>
+          </div>
+        </div>
+
+        <!-- Timer setting -->
+        <div class="timer-select-group">
+          <label>⏱ THỜI GIAN MỖI LƯỢT:</label>
+          <select id="timer-select">
+            <option value="5">5 giây</option>
+            <option value="8" selected>8 giây</option>
+            <option value="10">10 giây</option>
+            <option value="15">15 giây</option>
+          </select>
         </div>
 
         <div style="display: flex; gap: 10px;">
@@ -897,19 +1015,20 @@
     </div>
   </div>
 
-  <!-- Modal Victory Matchbox Winner -->
+  <!-- Modal Victory -->
   <div class="modal-overlay" id="victory-modal">
     <div class="modal-card">
       <div class="modal-title" id="modal-winner">🏆 MATRIX WINNER!</div>
-      <p style="color: #a8a29e; margin-bottom: 1.5rem;" id="modal-scores"></p>
+      <p style="color: #a8a29e; margin-bottom: 1.5rem; line-height: 1.8; font-size: 0.95rem;" id="modal-scores"></p>
       <button class="btn" id="btn-modal-restart" style="margin: 0 auto;">🔄 Đấu Ván Mới</button>
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/constants.js?v=7"></script>
-  <script src="/js/ui.js?v=7"></script>
-  <script src="/js/game.js?v=7"></script>
-  <script src="/js/app.js?v=7"></script>
+  <script src="/js/constants.js?v=12"></script>
+  <script src="/js/ui.js?v=19"></script>
+  <script src="/js/game.js?v=19"></script>
+  <script src="/js/app.js?v=19"></script>
 </body>
 </html>
