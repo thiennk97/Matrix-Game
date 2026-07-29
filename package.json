@@ -1,0 +1,13 @@
+{
+  "name": "matrix-game-server",
+  "version": "1.0.0",
+  "description": "Node.js Local Realtime In-Memory Server for Matrix Battle",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
