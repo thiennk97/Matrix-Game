@@ -25,7 +25,18 @@ socket.on('assigned_role', ({ playerIndex, roomCode }) => {
   }
 });
 
+let currentTurn = -1;
+
 socket.on('room_state_update', (state) => {
+  // Prevent accidental clicks for 0.5s when a new turn starts
+  if (state && state.turn !== currentTurn) {
+    currentTurn = state.turn;
+    window.isClickBlocked = true;
+    setTimeout(() => {
+      window.isClickBlocked = false;
+    }, 500);
+  }
+
   localRoomState = state;
   updateUI(state);
   renderPieceDisplay(state);
@@ -51,16 +62,20 @@ socket.on('game_over', (state) => {
   let sorted = state.players.slice().sort((a, b) => b.score - a.score);
   let maxScore = sorted[0] ? sorted[0].score : 1;
   
-  let winnerMsg = `🏆 ${sorted[0].name} THẮNG!`;
+  let winnerMsg = `🏆 ${sorted[0].name} LÀM BỐ!`;
   if (sorted.length > 1 && sorted[0].score === sorted[1].score) {
     winnerMsg = '🤝 HÒA TỶ SỐ!';
   }
 
   document.getElementById('modal-winner').textContent = winnerMsg;
   
-  let rankColors = ['#fcd34d', '#c0c0c0', '#cd7f32', '#a8a29e'];
-  let rankLabels = ['🥇 HẠNG 1', '🥈 HẠNG 2', '🥉 HẠNG 3', '▪️ HẠNG 4'];
-  let rankBg = ['rgba(252,211,77,0.12)', 'rgba(192,192,192,0.10)', 'rgba(205,127,50,0.10)', 'rgba(168,162,158,0.06)'];
+  let rankColors = ['#fcd34d', '#c0c0c0', '#cd7f32', '#a8a29e', '#a8a29e', '#a8a29e', '#a8a29e', '#a8a29e'];
+  let rankLabels = ['🥇 1', '🥈 2', '🥉 3', '4', '5', '6', '7', '8'];
+  let rankBg = [
+    'rgba(252,211,77,0.12)', 'rgba(192,192,192,0.10)', 'rgba(205,127,50,0.10)',
+    'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)',
+    'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)'
+  ];
   
   let scoresHtml = sorted.map((p, i) => {
     let barWidth = maxScore > 0 ? Math.max(8, Math.round((p.score / maxScore) * 100)) : 8;
@@ -68,7 +83,7 @@ socket.on('game_over', (state) => {
       <div class="rank-card" style="border-color:${rankColors[i]};background:${rankBg[i]};">
         <div class="rank-badge" style="color:${rankColors[i]};">${rankLabels[i]}</div>
         <div class="rank-name">${p.name}</div>
-        <div class="rank-score" style="color:${rankColors[i]};">${p.score} PTS</div>
+        <div class="rank-score" style="color:${rankColors[i]};">${p.score}</div>
         <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${barWidth}%;background:${rankColors[i]};"></div></div>
       </div>`;
   }).join('');
@@ -78,15 +93,11 @@ socket.on('game_over', (state) => {
 });
 
 // --- UI BUTTON EVENTS ---
-document.getElementById('btn-random-code').addEventListener('click', () => {
-  document.getElementById('room-code-input').value = 'MB-' + Math.floor(1000 + Math.random() * 9000);
-});
 
 document.getElementById('btn-join-room').addEventListener('click', () => {
-  let codeInput = document.getElementById('room-code-input');
   let nameInput = document.getElementById('player-name-input');
-  let name = (nameInput.value || '').trim();
-  let code = (codeInput.value || 'MB-8888').trim().toUpperCase();
+  let name = (nameInput ? nameInput.value : '').trim();
+  let code = 'GLOBAL';
 
   // Validate: tên bắt buộc
   if (!name || name.length === 0) {
@@ -101,7 +112,6 @@ document.getElementById('btn-join-room').addEventListener('click', () => {
     return;
   }
 
-  codeInput.value = code;
   currentRoomCode = code;
 
   if (!socket.connected) {
@@ -127,15 +137,6 @@ document.getElementById('btn-start-game-server').addEventListener('click', () =>
   let timerSelect = document.getElementById('timer-select');
   let turnTimeLimit = timerSelect ? Number(timerSelect.value) : 8;
   socket.emit('start_game', { roomCode: currentRoomCode, turnTimeLimit: turnTimeLimit });
-});
-
-document.getElementById('btn-copy-code').addEventListener('click', () => {
-  if (!currentRoomCode) return;
-  navigator.clipboard.writeText(currentRoomCode).then(() => {
-    showToast(`📋 Đã sao chép mã <strong>${currentRoomCode}</strong> vào bộ nhớ tạm!`);
-  }).catch(() => {
-    showToast(`Mã phòng của bạn: <strong>${currentRoomCode}</strong>`);
-  });
 });
 
 document.getElementById('btn-leave-room').addEventListener('click', () => {

@@ -35,6 +35,10 @@
       --p2-color: #38bdf8;
       --p3-color: #a78bfa;
       --p4-color: #34d399;
+      --p5-color: #fb7185;
+      --p6-color: #facc15;
+      --p7-color: #818cf8;
+      --p8-color: #2dd4bf;
     }
 
     * {
@@ -136,11 +140,12 @@
     .status-player-card {
       flex: 1;
       text-align: center;
-      padding: 0.4rem 0.5rem;
-      border-radius: 10px;
+      padding: 0.3rem 0.3rem;
+      border-radius: 8px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.06);
       transition: all 0.2s ease;
+      min-width: 0;
     }
 
     .status-player-card.is-me {
@@ -151,7 +156,7 @@
 
     .status-player-name {
       font-weight: 800;
-      font-size: 0.78rem;
+      font-size: 0.68rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -159,7 +164,7 @@
 
     .status-player-score {
       font-family: 'Orbitron', sans-serif;
-      font-size: 1.4rem;
+      font-size: 1rem;
       font-weight: 900;
     }
 
@@ -610,8 +615,8 @@
     /* Player Slots Grid inside Lobby - 2x2 for 4 players */
     .lobby-players-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.8rem;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 0.6rem;
     }
 
     .player-slot-card {
@@ -632,6 +637,10 @@
     .player-slot-card.p2-slot { border-color: var(--p2-color); }
     .player-slot-card.p3-slot { border-color: var(--p3-color); }
     .player-slot-card.p4-slot { border-color: var(--p4-color); }
+    .player-slot-card.p5-slot { border-color: var(--p5-color); }
+    .player-slot-card.p6-slot { border-color: var(--p6-color); }
+    .player-slot-card.p7-slot { border-color: var(--p7-color); }
+    .player-slot-card.p8-slot { border-color: var(--p8-color); }
 
     .slot-badge {
       font-size: 0.65rem;
@@ -646,6 +655,10 @@
     .slot-badge.p2 { background: rgba(56, 189, 248, 0.2); color: var(--p2-color); border: 1px solid var(--p2-color); }
     .slot-badge.p3 { background: rgba(167, 139, 250, 0.2); color: var(--p3-color); border: 1px solid var(--p3-color); }
     .slot-badge.p4 { background: rgba(52, 211, 153, 0.2); color: var(--p4-color); border: 1px solid var(--p4-color); }
+    .slot-badge.p5 { background: rgba(251, 113, 133, 0.2); color: var(--p5-color); border: 1px solid var(--p5-color); }
+    .slot-badge.p6 { background: rgba(250, 204, 21, 0.2); color: var(--p6-color); border: 1px solid var(--p6-color); }
+    .slot-badge.p7 { background: rgba(129, 140, 248, 0.2); color: var(--p7-color); border: 1px solid var(--p7-color); }
+    .slot-badge.p8 { background: rgba(45, 212, 191, 0.2); color: var(--p8-color); border: 1px solid var(--p8-color); }
 
     .slot-player-name {
       font-weight: 800;
@@ -768,54 +781,61 @@
     /* Ranking cards in victory modal */
     .rank-card {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 0.7rem 1rem;
-      border-radius: 12px;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      padding: 0.4rem 0.7rem;
+      border-radius: 8px;
       border: 1.5px solid;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.3rem;
       text-align: left;
       transition: all 0.2s ease;
     }
 
     .rank-card:first-child {
-      padding: 0.9rem 1.2rem;
-      box-shadow: 0 0 20px rgba(252, 211, 77, 0.2);
+      padding: 0.5rem 0.8rem;
+      box-shadow: 0 0 15px rgba(252, 211, 77, 0.2);
     }
 
     .rank-badge {
       font-family: 'Orbitron', sans-serif;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       font-weight: 900;
       letter-spacing: 1px;
+      min-width: 36px;
     }
 
     .rank-name {
-      font-size: 1rem;
+      font-size: 0.85rem;
       font-weight: 800;
       color: #fff;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .rank-card:first-child .rank-name {
-      font-size: 1.15rem;
+      font-size: 0.95rem;
     }
 
     .rank-score {
       font-family: 'Orbitron', sans-serif;
-      font-size: 1.3rem;
+      font-size: 0.9rem;
       font-weight: 900;
+      min-width: 50px;
+      text-align: right;
     }
 
     .rank-card:first-child .rank-score {
-      font-size: 1.6rem;
+      font-size: 1.1rem;
     }
 
     .rank-bar-bg {
-      width: 100%;
-      height: 5px;
+      width: 60px;
+      height: 4px;
       background: rgba(255, 255, 255, 0.06);
       border-radius: 3px;
-      margin-top: 3px;
       overflow: hidden;
     }
 
@@ -840,7 +860,6 @@
       <h1>MATRIX BATTLE <span>REALTIME SERVER ENGINE</span></h1>
     </div>
     <div style="font-size: 0.85rem; color: #a8a29e;">
-      Server Node.js WebSocket • Realtime Multi-room (tối đa 4 người) 🚀
     </div>
   </header>
 
@@ -878,22 +897,6 @@
     </div>
 
     <div class="right-panel">
-      <!-- Scores -->
-      <div class="panel-section">
-        <div class="panel-title">
-          <span>🏆 BẢNG ĐIỂM</span>
-          <span style="font-size: 0.75rem; color: var(--matchbox-green)">REALTIME</span>
-        </div>
-        <div class="all-players-scores" id="all-players-scores"></div>
-      </div>
-
-      <!-- Opponent mini boards -->
-      <div class="panel-section">
-        <div class="panel-title"><span>👀 BÀN ĐẤU ĐỐI THỦ</span></div>
-        <div class="opponents-boards-container" id="opponents-boards-container">
-          <div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.5rem;">Chưa bắt đầu trận đấu...</div>
-        </div>
-      </div>
 
       <!-- Match breakdown -->
       <div class="panel-section">
@@ -922,12 +925,12 @@
     <div class="lobby-card">
       <div class="lobby-header">
         <h2>🔥 MATRIX PONOS BATTLE MULTIPLAYER</h2>
-        <p>Hệ thống kết nối phòng đấu Realtime Node.js Socket.IO (tối đa 4 người)</p>
+        <p>Hệ thống kết nối phòng đấu Realtime Node.js Socket.IO (tối đa 8 người)</p>
       </div>
 
       <!-- BANNER THÔNG BÁO CHUNG REALTIME -->
       <div class="toast-banner" id="lobby-status-banner">
-        🟢 Hệ thống sẵn sàng!<br>Nhập tên & mã phòng để tạo hoặc tham gia phòng đấu.
+        🟢 Hệ thống sẵn sàng!<br>Nhập tên của bạn để tham gia vào trận đấu.
       </div>
 
       <!-- VIEW 1: CHƯA VÀO PHÒNG -->
@@ -937,15 +940,7 @@
           <input type="text" id="player-name-input" class="text-input" placeholder="Nhập tên của bạn..." style="font-size: 1rem; text-align: center;">
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.8rem; color: #a8a29e; font-weight: 700;">MÃ PHÒNG (VD: MB-8888):</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="room-code-input" class="text-input" value="MB-8888" style="font-size: 1.2rem; font-weight: 800; text-align: center; color: var(--matchbox-gold); letter-spacing: 1px;">
-            <button class="btn btn-cyan" id="btn-random-code">🎲 Tạo Mã</button>
-          </div>
-        </div>
-
-        <button class="btn btn-cyan" id="btn-join-room" style="padding: 0.9rem; font-size: 1rem;">🔗 THAM GIA / TẠO PHÒNG</button>
+        <button class="btn btn-cyan" id="btn-join-room" style="padding: 0.9rem; font-size: 1rem;">🔗 VÀO GAME</button>
       </div>
 
       <!-- VIEW 2: ĐÃ VÀO PHÒNG -->
@@ -953,11 +948,10 @@
         <div style="display: flex; justify-content: space-between; align-items: center; background: #180b03; border: 1px solid var(--border); border-radius: 12px; padding: 0.6rem 1rem;">
           <div>
             <span style="font-size: 0.75rem; color: #a8a29e;">MÃ PHÒNG:</span>
-            <strong style="font-size: 1.1rem; color: var(--matchbox-gold); margin-left: 6px;" id="current-room-code-text">MB-8888</strong>
+            <strong style="font-size: 1.1rem; color: var(--matchbox-gold); margin-left: 6px;" id="current-room-code-text">GLOBAL</strong>
           </div>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-cyan" id="btn-copy-code" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">📋 Copy Mã</button>
-            <button class="btn" id="btn-leave-room" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); color: #a8a29e;">🚪 Chọn Mã Khác</button>
+            <button class="btn" id="btn-leave-room" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); color: #a8a29e;">🚪 Thoát</button>
           </div>
         </div>
 
@@ -994,10 +988,42 @@
             <div class="status-pill waiting" id="lobby-p4-conn">⏳ Chờ người chơi</div>
             <div class="ready-tag not-ready" id="lobby-p4-ready">—</div>
           </div>
+
+          <!-- SLOT P5 -->
+          <div class="player-slot-card p5-slot" id="card-p5-slot">
+            <span class="slot-badge p5">P5</span>
+            <div class="slot-player-name" id="lobby-p5-name">Chờ P5 vào...</div>
+            <div class="status-pill waiting" id="lobby-p5-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p5-ready">—</div>
+          </div>
+
+          <!-- SLOT P6 -->
+          <div class="player-slot-card p6-slot" id="card-p6-slot">
+            <span class="slot-badge p6">P6</span>
+            <div class="slot-player-name" id="lobby-p6-name">Chờ P6 vào...</div>
+            <div class="status-pill waiting" id="lobby-p6-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p6-ready">—</div>
+          </div>
+
+          <!-- SLOT P7 -->
+          <div class="player-slot-card p7-slot" id="card-p7-slot">
+            <span class="slot-badge p7">P7</span>
+            <div class="slot-player-name" id="lobby-p7-name">Chờ P7 vào...</div>
+            <div class="status-pill waiting" id="lobby-p7-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p7-ready">—</div>
+          </div>
+
+          <!-- SLOT P8 -->
+          <div class="player-slot-card p8-slot" id="card-p8-slot">
+            <span class="slot-badge p8">P8</span>
+            <div class="slot-player-name" id="lobby-p8-name">Chờ P8 vào...</div>
+            <div class="status-pill waiting" id="lobby-p8-conn">⏳ Chờ người chơi</div>
+            <div class="ready-tag not-ready" id="lobby-p8-ready">—</div>
+          </div>
         </div>
 
         <!-- Timer setting -->
-        <div class="timer-select-group">
+        <div class="timer-select-group" id="timer-setting-group">
           <label>⏱ THỜI GIAN MỖI LƯỢT:</label>
           <select id="timer-select">
             <option value="5">5 giây</option>
@@ -1026,9 +1052,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/constants.js?v=12"></script>
-  <script src="/js/ui.js?v=19"></script>
-  <script src="/js/game.js?v=19"></script>
-  <script src="/js/app.js?v=19"></script>
+  <script src="/js/constants.js?v=29"></script>
+  <script src="/js/ui.js?v=29"></script>
+  <script src="/js/game.js?v=29"></script>
+  <script src="/js/app.js?v=29"></script>
 </body>
 </html>

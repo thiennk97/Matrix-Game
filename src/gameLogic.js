@@ -1,6 +1,6 @@
 const { TOTAL_SLOTS, NUM_MIN, NUM_MAX, TURN_TIME_LIMIT } = require('./constants');
 
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 8;
 
 function randomNum() {
   return Math.floor(Math.random() * (NUM_MAX - NUM_MIN + 1)) + NUM_MIN;

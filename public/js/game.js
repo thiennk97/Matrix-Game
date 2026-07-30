@@ -3,6 +3,10 @@ var currentRoomCode = '';
 var localRoomState = null;
 var hasJoinedRoom = false;
 
+var lastHoveredR = -1;
+var lastHoveredC = -1;
+var hoverTimeout = null;
+
 function getMyPlayer(state) {
   if (!state || !state.players || myPlayerIndex < 0 || myPlayerIndex >= state.players.length) return null;
   return state.players[myPlayerIndex];
@@ -25,40 +29,28 @@ function handleCellHover(r, c, isHover) {
   let myPlayer = getMyPlayerBySocket(localRoomState);
   if (!myPlayer || myPlayer.hasPlacedThisRound) return;
 
-  let myBoard = myPlayer.board;
-  if (!myBoard) return;
-
-  let slotIdx = c * 3 + Math.floor(r / 3);
-  let coords = VERTICAL_SLOTS[slotIdx];
-  if (!coords) return;
-
-  let isSlotEmpty = coords.every(coord => myBoard[coord.r][coord.c] === null);
-  if (!isSlotEmpty) return;
-
-  let piece = localRoomState.currentPiece;
-  coords.forEach((coord, idx) => {
-    let cellIdx = coord.r * 9 + coord.c;
-    let pCell = pixiCells[cellIdx];
-    if (pCell) {
-      if (isHover) {
-        pCell.bg.tint = 0x0284c7; // hover blue
-        if (piece && piece[idx] !== undefined) {
-          pCell.text.text = piece[idx];
-          pCell.text.style.fill = '#ffffff';
-          pCell.text.alpha = 0.6;
-        }
-      } else {
-        pCell.bg.tint = 0xFFFFFF; // white
-        pCell.text.text = '';
-        pCell.text.style.fill = '#000000';
-        pCell.text.alpha = 1;
-      }
+  if (isHover) {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      hoverTimeout = null;
     }
-  });
+    lastHoveredR = r;
+    lastHoveredC = c;
+    render(localRoomState);
+  } else {
+    // Delay un-hover slightly to prevent flickering when moving between cells
+    hoverTimeout = setTimeout(() => {
+      lastHoveredR = -1;
+      lastHoveredC = -1;
+      render(localRoomState);
+    }, 15);
+  }
 }
 
 function handleCellClick(r, c) {
   try {
+    if (window.isClickBlocked) return;
+
     if (!localRoomState || !localRoomState.isGameStarted) {
       showToast('⚠️ Trận đấu chưa bắt đầu!');
       return;
@@ -155,12 +147,12 @@ function render(state) {
         if (val !== null) {
           pCell.bg.tint = 0x38bdf8; // cyan
           pCell.text.text = val;
-          pCell.text.style.fill = '#000000';
+          pCell.text.style.fill = '#1e293b'; // softer black
           pCell.text.alpha = 1;
         } else {
           pCell.bg.tint = 0xFFFFFF;
           pCell.text.text = '';
-          pCell.text.style.fill = '#000000';
+          pCell.text.style.fill = '#1e293b';
           pCell.text.alpha = 1;
         }
       }
@@ -173,9 +165,32 @@ function render(state) {
       pixiGridContainer.interactiveChildren = true;
       pixiGridContainer.cursor = 'default';
     }
+    
+    // Apply hover preview if active
+    if (!state.isGameOver && !myHasPlaced && lastHoveredR !== -1 && lastHoveredC !== -1) {
+      let slotIdx = lastHoveredC * 3 + Math.floor(lastHoveredR / 3);
+      let coords = VERTICAL_SLOTS[slotIdx];
+      if (coords) {
+        let isSlotEmpty = coords.every(coord => myBoard[coord.r][coord.c] === null);
+        if (isSlotEmpty) {
+          let piece = state.currentPiece;
+          coords.forEach((coord, idx) => {
+            let cellIdx = coord.r * 9 + coord.c;
+            let pCell = pixiCells[cellIdx];
+            if (pCell) {
+              pCell.bg.tint = 0x0284c7; // hover blue
+              if (piece && piece[idx] !== undefined) {
+                pCell.text.text = piece[idx];
+                pCell.text.style.fill = '#ffffff';
+                pCell.text.alpha = 0.6;
+              }
+            }
+          });
+        }
+      }
+    }
   }
 
   renderSVGMatchLines(myMatchedLines || []);
   renderScoreBreakdown(state);
-  renderMiniOpponentBoards(state);
 }

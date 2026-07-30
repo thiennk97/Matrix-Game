@@ -1,6 +1,6 @@
-const { VERTICAL_SLOTS } = require('./constants');
+const { VERTICAL_SLOTS, TOTAL_SLOTS } = require('./constants');
 const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreForBoard } = require('./gameLogic');
-const { rooms, getPublicRoomState, startServerTurnTimer } = require('./roomManager');
+const { rooms, getPublicRoomState, startServerTurnTimer, advanceNextTurnServer } = require('./roomManager');
 
 function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -24,6 +24,17 @@ function registerSocketHandlers(io) {
       }
 
       const room = rooms[roomCode];
+
+      // Block joining if game has already started AND is not over yet
+      if (room.isGameStarted && !room.isGameOver) {
+        let existingIdx = room.players.findIndex(p => p.socketId === socket.id);
+        // Only allow rejoin if they are already in the room
+        if (existingIdx === -1) {
+          socket.emit('error_message', '⚠️ Trận đấu đang diễn ra! Vui lòng chờ đến khi kết thúc.');
+          return;
+        }
+      }
+
       const activeSockets = io.sockets.adapter.rooms.get(roomCode);
 
       // Check if this socket already has a slot
@@ -179,6 +190,18 @@ function registerSocketHandlers(io) {
 
       io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
       console.log(`🎯 Player ${playerIndex + 1} placed piece (slot #${slotIdx}) in Room [${roomCode}]`);
+
+      // If all players have placed their piece, skip the timer ONLY on the last turn (27/27) to end game immediately
+      let allPlaced = room.players.every(p => p.hasPlacedThisRound);
+      if (allPlaced && room.turn === TOTAL_SLOTS - 1) {
+        if (room.timerInterval) {
+          clearInterval(room.timerInterval);
+          room.timerInterval = null;
+        }
+        room.timeLeft = 0;
+        advanceNextTurnServer(io, roomCode);
+        console.log(`⚡ All players placed pieces on final turn in Room [${roomCode}], ending game immediately.`);
+      }
     });
 
     socket.on('disconnect', () => {
@@ -194,7 +217,16 @@ function registerSocketHandlers(io) {
           }
         });
         if (updated) {
-          io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+          let allDisconnected = room.players.every(p => !p.socketId);
+          if (allDisconnected) {
+            console.log(`⚠️ All players disconnected in Room [${roomCode}], deleting room.`);
+            if (room.timerInterval) {
+              clearInterval(room.timerInterval);
+            }
+            delete rooms[roomCode];
+          } else {
+            io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+          }
         }
       }
     });
