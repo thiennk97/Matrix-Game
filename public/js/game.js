@@ -38,6 +38,9 @@ function handleCellHover(r, c, isHover) {
     lastHoveredC = c;
     render(localRoomState);
   } else {
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+    }
     // Delay un-hover slightly to prevent flickering when moving between cells
     hoverTimeout = setTimeout(() => {
       lastHoveredR = -1;
@@ -109,15 +112,15 @@ function renderPieceDisplay(state) {
     return;
   }
 
-  piecePanelLabelEl.textContent = '🍊 MẢNH GHÉP VÒNG (3x1):';
-  piecePanelLabelEl.style.color = 'var(--matchbox-orange)';
   pieceDisplayEl.className = 'current-piece-vertical';
 
   let myPlayer = getMyPlayerBySocket(state);
   if (myPlayer && myPlayer.hasPlacedThisRound) {
-    pieceDisplayEl.innerHTML = `<div style="font-size: 0.8rem; color: #a8a29e; text-align: center; font-family: 'Plus Jakarta Sans', sans-serif;">⏳ Đã hạ quân!<br><br>Đang chờ vòng mới...</div>`;
+    pieceDisplayEl.style.background = 'transparent';
     return;
   }
+  
+  pieceDisplayEl.style.background = '#fbbf24';
 
   state.currentPiece.forEach(num => {
     let box = document.createElement('div');
@@ -136,59 +139,118 @@ function render(state) {
   let myBoard = myPlayer.board;
   let myHasPlaced = myPlayer.hasPlacedThisRound;
   let myMatchedLines = myPlayer.matchedLines;
+  let hoverPiece = state.currentPiece;
 
   if (pixiCells && pixiCells.length === 81) {
+    // Compute cell colors
+    let cellColor = Array(9).fill(null).map(() => Array(9).fill(null));
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
-        let idx = r * 9 + c;
-        let pCell = pixiCells[idx];
-        let val = (myBoard && myBoard[r]) ? myBoard[r][c] : null;
-
-        if (val !== null) {
-          pCell.bg.tint = 0x38bdf8; // cyan
-          pCell.text.text = val;
-          pCell.text.style.fill = '#1e293b'; // softer black
-          pCell.text.alpha = 1;
-        } else {
-          pCell.bg.tint = 0xFFFFFF;
-          pCell.text.text = '';
-          pCell.text.style.fill = '#1e293b';
-          pCell.text.alpha = 1;
+        if (myBoard && myBoard[r] && myBoard[r][c] !== null) {
+          cellColor[r][c] = 0xfacc15;
         }
       }
     }
 
-    if (!state.isGameStarted || myHasPlaced || state.isGameOver) {
-      pixiGridContainer.interactiveChildren = false;
-      pixiGridContainer.cursor = 'not-allowed';
-    } else {
-      pixiGridContainer.interactiveChildren = true;
-      pixiGridContainer.cursor = 'default';
-    }
-    
-    // Apply hover preview if active
-    if (!state.isGameOver && !myHasPlaced && lastHoveredR !== -1 && lastHoveredC !== -1) {
+    // Hover piece
+    if (!state.isGameOver && !myHasPlaced && hoverPiece && lastHoveredR >= 0 && lastHoveredC >= 0) {
       let slotIdx = lastHoveredC * 3 + Math.floor(lastHoveredR / 3);
       let coords = VERTICAL_SLOTS[slotIdx];
-      if (coords) {
-        let isSlotEmpty = coords.every(coord => myBoard[coord.r][coord.c] === null);
-        if (isSlotEmpty) {
-          let piece = state.currentPiece;
-          coords.forEach((coord, idx) => {
-            let cellIdx = coord.r * 9 + coord.c;
-            let pCell = pixiCells[cellIdx];
-            if (pCell) {
-              pCell.bg.tint = 0x0284c7; // hover blue
-              if (piece && piece[idx] !== undefined) {
-                pCell.text.text = piece[idx];
-                pCell.text.style.fill = '#ffffff';
-                pCell.text.alpha = 0.6;
-              }
+      if (coords && coords.every(coord => (myBoard[coord.r] && myBoard[coord.r][coord.c] === null))) {
+        coords.forEach(coord => {
+          cellColor[coord.r][coord.c] = 0xfef08a;
+        });
+      }
+    }
+
+    // Update board
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        let cellIdx = r * 9 + c;
+        let pCell = pixiCells[cellIdx];
+        if (pCell) {
+          let color = cellColor[r][c];
+
+          // Background
+          if (color !== null) {
+            pCell.bg.tint = color;
+          } else {
+            pCell.bg.tint = 0xFFFFFF;
+          }
+
+          // Text
+          let val = (myBoard && myBoard[r]) ? myBoard[r][c] : null;
+          if (val !== null) {
+            pCell.text.text = val;
+            pCell.text.style.fill = '#1a1a1a';
+            pCell.text.alpha = 1;
+          } else {
+            pCell.text.text = '';
+            pCell.text.alpha = 1;
+          }
+
+          // gapCoverV
+          if (pCell.gapCoverV) {
+            let colorDown = (r < 8) ? cellColor[r+1][c] : null;
+            if (color !== null && colorDown !== null) {
+              pCell.gapCoverV.visible = true;
+              pCell.gapCoverV.tint = (color === 0xfacc15 || colorDown === 0xfacc15) ? 0xfacc15 : 0xfef08a;
+            } else {
+              pCell.gapCoverV.visible = false;
             }
-          });
+          }
+
+          // gapCoverH
+          if (pCell.gapCoverH) {
+            let colorRight = (c < 8) ? cellColor[r][c+1] : null;
+            if (color !== null && colorRight !== null) {
+              pCell.gapCoverH.visible = true;
+              pCell.gapCoverH.tint = (color === 0xfacc15 || colorRight === 0xfacc15) ? 0xfacc15 : 0xfef08a;
+            } else {
+              pCell.gapCoverH.visible = false;
+            }
+          }
+
+          // gapCoverCross
+          if (pCell.gapCoverCross) {
+            let cRight = (c < 8) ? cellColor[r][c+1] : null;
+            let cDown = (r < 8) ? cellColor[r+1][c] : null;
+            let cDownRight = (r < 8 && c < 8) ? cellColor[r+1][c+1] : null;
+            if (color !== null && cRight !== null && cDown !== null && cDownRight !== null) {
+              pCell.gapCoverCross.visible = true;
+              pCell.gapCoverCross.tint = 0xfacc15;
+            } else {
+              pCell.gapCoverCross.visible = false;
+            }
+          }
         }
       }
     }
+
+  if (!state.isGameStarted || myHasPlaced || state.isGameOver) {
+    pixiGridContainer.interactiveChildren = false;
+    pixiGridContainer.cursor = 'not-allowed';
+  } else {
+    pixiGridContainer.interactiveChildren = true;
+    pixiGridContainer.cursor = 'default';
+  }
+  
+  // Draw hovering text explicitly
+  if (!state.isGameOver && !myHasPlaced && hoverPiece && lastHoveredR >= 0 && lastHoveredC >= 0) {
+    let slotIdx = lastHoveredC * 3 + Math.floor(lastHoveredR / 3);
+    let coords = VERTICAL_SLOTS[slotIdx];
+    if (coords && coords.every(coord => (myBoard[coord.r] && myBoard[coord.r][coord.c] === null))) {
+      coords.forEach((coord, i) => {
+        let pCell = pixiCells[coord.r * 9 + coord.c];
+        if (pCell) {
+          pCell.text.text = hoverPiece[i];
+          pCell.text.style.fill = '#1e293b';
+          pCell.text.alpha = 0.6;
+        }
+      });
+    }
+  }
+
   }
 
   renderSVGMatchLines(myMatchedLines || []);

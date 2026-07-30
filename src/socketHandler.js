@@ -1,6 +1,6 @@
 const { VERTICAL_SLOTS, TOTAL_SLOTS } = require('./constants');
-const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreForBoard } = require('./gameLogic');
-const { rooms, getPublicRoomState, startServerTurnTimer, advanceNextTurnServer } = require('./roomManager');
+const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreIncremental } = require('./gameLogic');
+const { rooms, emitRoomState, getStateForPlayer, startServerTurnTimer, advanceNextTurnServer } = require('./roomManager');
 
 function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -43,7 +43,7 @@ function registerSocketHandlers(io) {
         // Already in room, just update name if provided
         if (playerName) room.players[existingIdx].name = playerName;
         socket.emit('assigned_role', { playerIndex: existingIdx, roomCode: roomCode });
-        io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+        emitRoomState(io, room);
         console.log(`👥 Socket ${socket.id} rejoined room [${roomCode}] as Player ${existingIdx + 1}`);
         return;
       }
@@ -72,7 +72,7 @@ function registerSocketHandlers(io) {
       }
 
       socket.emit('assigned_role', { playerIndex: playerIndex, roomCode: roomCode });
-      io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+      emitRoomState(io, room);
       console.log(`👥 Socket ${socket.id} joined room [${roomCode}] as Player ${playerIndex + 1}`);
     });
 
@@ -87,7 +87,7 @@ function registerSocketHandlers(io) {
         player.ready = !player.ready;
       }
 
-      io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+      emitRoomState(io, room);
       console.log(`⚡ Socket ${socket.id} toggled ready state in room [${roomCode}]`);
     });
 
@@ -184,11 +184,11 @@ function registerSocketHandlers(io) {
       });
 
       player.hasPlacedThisRound = true;
-      let res = calculateScoreForBoard(player.board);
+      let res = calculateScoreIncremental(player.board, coords, player.matchedLines);
       player.score = res.totalScore;
       player.matchedLines = res.matchLines;
 
-      io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+      emitRoomState(io, room);
       console.log(`🎯 Player ${playerIndex + 1} placed piece (slot #${slotIdx}) in Room [${roomCode}]`);
 
       // If all players have placed their piece, skip the timer ONLY on the last turn (27/27) to end game immediately
@@ -201,6 +201,34 @@ function registerSocketHandlers(io) {
         room.timeLeft = 0;
         advanceNextTurnServer(io, roomCode);
         console.log(`⚡ All players placed pieces on final turn in Room [${roomCode}], ending game immediately.`);
+      }
+    });
+
+    socket.on('leave_room', ({ roomCode }) => {
+      if (!roomCode) return;
+      socket.leave(roomCode);
+      const room = rooms[roomCode];
+      if (room) {
+        let updated = false;
+        room.players.forEach(p => {
+          if (p.socketId === socket.id) {
+            p.socketId = null;
+            p.ready = false;
+            updated = true;
+          }
+        });
+        if (updated) {
+          let allDisconnected = room.players.every(p => !p.socketId);
+          if (allDisconnected) {
+            console.log(`⚠️ All players left Room [${roomCode}], deleting room.`);
+            if (room.timerInterval) {
+              clearInterval(room.timerInterval);
+            }
+            delete rooms[roomCode];
+          } else {
+            emitRoomState(io, room);
+          }
+        }
       }
     });
 
@@ -225,7 +253,7 @@ function registerSocketHandlers(io) {
             }
             delete rooms[roomCode];
           } else {
-            io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+            emitRoomState(io, room);
           }
         }
       }

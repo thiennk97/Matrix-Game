@@ -17,12 +17,11 @@ var pixiGridContainer;
 var pixiCells = [];
 var pixiMatchGraphics;
 
-// Helper function to calculate exact pixel coordinates for a cell (r, c)
 function getCellPos(r, c) {
   const CELL_W = 50;
-  const GAP = 2;          // 2px gap between normal cells
-  const BLOCK_GAP = 2;    // 2px extra gap between 3x3 blocks (total 4px gap)
-  const PADDING = 8;      // 8px padding around the board
+  const GAP = 1;          // 1px gap between normal cells
+  const BLOCK_GAP = 1;    // 1px extra gap between 3x3 blocks
+  const PADDING = 2;      // 2px padding around the board
 
   let blockRow = Math.floor(r / 3);
   let blockCol = Math.floor(c / 3);
@@ -30,7 +29,10 @@ function getCellPos(r, c) {
   let x = PADDING + c * (CELL_W + GAP) + blockCol * BLOCK_GAP;
   let y = PADDING + r * (CELL_W + GAP) + blockRow * BLOCK_GAP;
   
-  return { x, y, width: CELL_W };
+  let gapX = (c % 3 === 2) ? (GAP + BLOCK_GAP) : GAP;
+  let gapY = (r % 3 === 2) ? (GAP + BLOCK_GAP) : GAP;
+
+  return { x, y, width: CELL_W, gapX, gapY };
 }
 
 function log(msg, type = 'info') {
@@ -38,6 +40,12 @@ function log(msg, type = 'info') {
   item.className = `log-item ${type}`;
   item.textContent = `[System] ${msg}`;
   logBox.appendChild(item);
+  
+  // Prevent DOM memory leak by keeping only the last 50 logs
+  while (logBox.children.length > 50) {
+    logBox.removeChild(logBox.firstChild);
+  }
+  
   logBox.scrollTop = logBox.scrollHeight;
 }
 
@@ -50,9 +58,9 @@ function createGridUI() {
   if (pixiApp) return;
 
   pixiApp = new PIXI.Application({
-    width: 490,
-    height: 490,
-    backgroundColor: 0x180b03,
+    width: 464,
+    height: 464,
+    backgroundColor: 0xFFFFFF,
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
   });
@@ -60,11 +68,14 @@ function createGridUI() {
   let container = document.getElementById('pixi-board-container');
   container.innerHTML = '';
   container.appendChild(pixiApp.view);
+  
+  container.style.width = '464px';
+  container.style.height = '464px';
 
   // Background wrapper for the grid (serves as the grid lines color)
   let gridBg = new PIXI.Graphics();
-  gridBg.beginFill(0x334155);
-  gridBg.drawRect(0, 0, 490, 490);
+  gridBg.beginFill(0x1a1a1a);
+  gridBg.drawRect(0, 0, 464, 464);
   gridBg.endFill();
   pixiApp.stage.addChild(gridBg);
 
@@ -91,12 +102,42 @@ function createGridUI() {
       bg.drawRect(0, 0, pos.width, pos.width);
       bg.endFill();
       cellGroup.addChild(bg);
+      
+      let gapCoverV = null;
+      if (r < 8) {
+        gapCoverV = new PIXI.Graphics();
+        gapCoverV.beginFill(0xFFFFFF);
+        gapCoverV.drawRect(0, pos.width, pos.width, pos.gapY);
+        gapCoverV.endFill();
+        gapCoverV.visible = false;
+        cellGroup.addChild(gapCoverV);
+      }
+
+      let gapCoverH = null;
+      if (c < 8) {
+        gapCoverH = new PIXI.Graphics();
+        gapCoverH.beginFill(0xFFFFFF);
+        gapCoverH.drawRect(pos.width, 0, pos.gapX, pos.width);
+        gapCoverH.endFill();
+        gapCoverH.visible = false;
+        cellGroup.addChild(gapCoverH);
+      }
+
+      let gapCoverCross = null;
+      if (r < 8 && c < 8) {
+        gapCoverCross = new PIXI.Graphics();
+        gapCoverCross.beginFill(0xFFFFFF);
+        gapCoverCross.drawRect(pos.width, pos.width, pos.gapX, pos.gapY);
+        gapCoverCross.endFill();
+        gapCoverCross.visible = false;
+        cellGroup.addChild(gapCoverCross);
+      }
 
       let text = new PIXI.Text('', {
         fontFamily: 'Plus Jakarta Sans',
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: '600',
-        fill: '#1e293b'
+        fill: '#1a1a1a'
       });
       text.anchor.set(0.5);
       text.x = pos.width / 2;
@@ -108,7 +149,7 @@ function createGridUI() {
       cellGroup.on('pointerdown', () => handleCellClick(r, c));
 
       pixiGridContainer.addChild(cellGroup);
-      pixiCells.push({ bg, text });
+      pixiCells.push({ bg, text, gapCoverV, gapCoverH, gapCoverCross });
     }
   }
 
@@ -120,17 +161,19 @@ function renderSVGMatchLines(matchedLinesDetail) {
   if (!pixiMatchGraphics) return;
   pixiMatchGraphics.clear();
   if (!matchedLinesDetail || !matchedLinesDetail.length) return;
-
-  pixiMatchGraphics.lineStyle(5, 0xf97316, 1);
+  pixiMatchGraphics.lineStyle(3, 0x000000, 1);
 
   matchedLinesDetail.forEach(lineInfo => {
     let pos1 = getCellPos(lineInfo.start.r, lineInfo.start.c);
     let pos2 = getCellPos(lineInfo.end.r, lineInfo.end.c);
 
-    let x1 = pos1.x + pos1.width / 2;
-    let y1 = pos1.y + pos1.width / 2;
-    let x2 = pos2.x + pos2.width / 2;
-    let y2 = pos2.y + pos2.width / 2;
+    let dr = Math.sign(lineInfo.end.r - lineInfo.start.r);
+    let dc = Math.sign(lineInfo.end.c - lineInfo.start.c);
+
+    let x1 = pos1.x + pos1.width / 2 - dc * (pos1.width / 2);
+    let y1 = pos1.y + pos1.width / 2 - dr * (pos1.width / 2);
+    let x2 = pos2.x + pos2.width / 2 + dc * (pos2.width / 2);
+    let y2 = pos2.y + pos2.width / 2 + dr * (pos2.width / 2);
 
     pixiMatchGraphics.moveTo(x1, y1);
     pixiMatchGraphics.lineTo(x2, y2);
@@ -142,25 +185,29 @@ function renderSVGMatchLines(matchedLinesDetail) {
 function renderScoreBreakdown(state) {
   if (!state || !state.players) return;
 
-  let myPlayer = getMyPlayerBySocket(state);
-  let myMatchedLines = myPlayer ? myPlayer.matchedLines : [];
-
-  // Render match breakdown list
   matchListEl.innerHTML = '';
-  if (!myMatchedLines || myMatchedLines.length === 0) {
-    matchListEl.innerHTML = `<div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.8rem;">Chưa có đường 3 ô kề nhau...</div>`;
+  
+  let rankedPlayers = [...state.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  if (rankedPlayers.length === 0) {
+    matchListEl.innerHTML = `<div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.8rem;">Chưa có dữ liệu...</div>`;
     return;
   }
 
-  myMatchedLines.forEach(item => {
+  rankedPlayers.forEach((p, index) => {
     let row = document.createElement('div');
     row.className = 'match-item active';
+    let isMe = socket && p.socketId === socket.id;
+    if (isMe) {
+      row.style.background = 'rgba(251, 191, 36, 0.1)';
+      row.style.borderColor = 'rgba(251, 191, 36, 0.3)';
+    }
+    
     row.innerHTML = `
       <div>
-        <strong>${item.name}</strong>
-        <div style="font-size: 0.72rem; color: #a8a29e;">Số ${item.val} x ${item.len} ô liên tiếp</div>
+        <strong style="color: ${isMe ? '#fbbf24' : '#e2e8f0'};">Hạng ${index + 1}: ${p.name || 'Unknown'}</strong>
       </div>
-      <div class="match-tag">+${item.points} PTS</div>
+      <div class="match-tag" style="background: ${isMe ? '#fbbf24' : 'rgba(255,255,255,0.1)'}; color: ${isMe ? '#000' : '#fff'};">${p.score || 0} PTS</div>
     `;
     matchListEl.appendChild(row);
   });
@@ -214,10 +261,18 @@ function updateUI(state) {
     turnStatusTextEl.style.color = 'var(--matchbox-orange)';
   }
 
+  let boardNameEl = document.getElementById('board-player-name');
+  if (boardNameEl && myPlayer) {
+    boardNameEl.textContent = myPlayer.name;
+  }
+
   // Sidebar info
-  document.getElementById('sidebar-room-info').textContent = `📍 Phòng: ${state.roomCode}`;
+  let sidebarRoomEl = document.getElementById('sidebar-room-info');
+  if (sidebarRoomEl) sidebarRoomEl.textContent = `📍 Phòng: ${state.roomCode}`;
+  
   let roleText = myPlayerIndex >= 0 ? `Player ${myPlayerIndex + 1}${myPlayerIndex === 0 ? ' (Host)' : ''}` : 'Chưa vào phòng';
-  document.getElementById('sidebar-role-info').textContent = `👤 Vai trò: ${roleText}`;
+  let sidebarRoleEl = document.getElementById('sidebar-role-info');
+  if (sidebarRoleEl) sidebarRoleEl.textContent = `👤 Vai trò: ${roleText}`;
 
   // Update Lobby Room View
   document.getElementById('current-room-code-text').textContent = state.roomCode;

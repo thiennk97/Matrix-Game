@@ -40,159 +40,168 @@ function createNewRoomState(roomCode) {
   };
 }
 
-function calculateScoreForBoard(board) {
-  let matchedCellsMap = new Map();
-  let matchLines = [];
+// --- Incremental Scoring ---
+// Instead of scanning all 52 lines every move, only re-scan
+// the ~10 lines (rows/cols/diagonals) that intersect the placed cells.
 
-  // Rows
-  for (let r = 0; r < 9; r++) {
-    let matchLen = 1;
-    for (let c = 0; c < 9; c++) {
-      if (c < 8 && board[r][c] !== null && board[r][c] === board[r][c + 1]) {
-        matchLen++;
-      } else {
-        if (matchLen >= 3) {
-          let val = board[r][c];
-          let startC = c - matchLen + 1;
-          let endC = c;
+function getAffectedLineIds(coords) {
+  let ids = new Set();
+  coords.forEach(({ r, c }) => {
+    ids.add(`row-${r}`);
+    ids.add(`col-${c}`);
+    ids.add(`diagA-${r + c}`);       // k = r + c (anti-diagonal sweep)
+    ids.add(`diagB-${r - c + 8}`);   // k = r - c + 8 (main diagonal sweep)
+  });
+  return ids;
+}
 
-          for (let k = startC; k <= endC; k++) {
-            let key = `${r},${k}`;
-            let curr = matchedCellsMap.get(key) || { count: 0, val };
-            curr.count++;
-            matchedCellsMap.set(key, curr);
-          }
-
-          matchLines.push({
-            name: `Hàng ${r + 1}`,
-            val, len: matchLen, points: val * matchLen,
-            start: { r, c: startC },
-            end: { r, c: endC }
-          });
-        }
-        matchLen = 1;
-      }
-    }
-  }
-
-  // Columns
+function scanRow(board, r) {
+  let matches = [];
+  let matchLen = 1;
   for (let c = 0; c < 9; c++) {
-    let matchLen = 1;
-    for (let r = 0; r < 9; r++) {
-      if (r < 8 && board[r][c] !== null && board[r][c] === board[r + 1][c]) {
-        matchLen++;
-      } else {
-        if (matchLen >= 3) {
-          let val = board[r][c];
-          let startR = r - matchLen + 1;
-          let endR = r;
-
-          for (let k = startR; k <= endR; k++) {
-            let key = `${k},${c}`;
-            let curr = matchedCellsMap.get(key) || { count: 0, val };
-            curr.count++;
-            matchedCellsMap.set(key, curr);
-          }
-
-          matchLines.push({
-            name: `Cột ${c + 1}`,
-            val, len: matchLen, points: val * matchLen,
-            start: { r: startR, c },
-            end: { r: endR, c }
-          });
-        }
-        matchLen = 1;
+    if (c < 8 && board[r][c] !== null && board[r][c] === board[r][c + 1]) {
+      matchLen++;
+    } else {
+      if (matchLen >= 3) {
+        let val = board[r][c];
+        let startC = c - matchLen + 1;
+        matches.push({
+          lineId: `row-${r}`,
+          name: `Hàng ${r + 1}`,
+          val, len: matchLen, points: val * matchLen,
+          start: { r, c: startC },
+          end: { r, c }
+        });
       }
+      matchLen = 1;
     }
   }
+  return matches;
+}
 
-  // Diagonals Main
-  for (let k = 0; k < 9 + 9 - 1; k++) {
-    let line = [];
-    for (let r = 0; r < 9; r++) {
-      let c = k - r;
-      if (c >= 0 && c < 9) {
-        line.push({ r, c, val: board[r][c] });
+function scanCol(board, c) {
+  let matches = [];
+  let matchLen = 1;
+  for (let r = 0; r < 9; r++) {
+    if (r < 8 && board[r][c] !== null && board[r][c] === board[r + 1][c]) {
+      matchLen++;
+    } else {
+      if (matchLen >= 3) {
+        let val = board[r][c];
+        let startR = r - matchLen + 1;
+        matches.push({
+          lineId: `col-${c}`,
+          name: `Cột ${c + 1}`,
+          val, len: matchLen, points: val * matchLen,
+          start: { r: startR, c },
+          end: { r, c }
+        });
       }
-    }
-    if (line.length >= 3) {
-      let matchLen = 1;
-      for (let i = 0; i < line.length; i++) {
-        if (i < line.length - 1 && line[i].val !== null && line[i].val === line[i + 1].val) {
-          matchLen++;
-        } else {
-          if (matchLen >= 3) {
-            let val = line[i].val;
-            let startCell = line[i - matchLen + 1];
-            let endCell = line[i];
-
-            for (let m = i - matchLen + 1; m <= i; m++) {
-              let cell = line[m];
-              let key = `${cell.r},${cell.c}`;
-              let curr = matchedCellsMap.get(key) || { count: 0, val };
-              curr.count++;
-              matchedCellsMap.set(key, curr);
-            }
-
-            matchLines.push({
-              name: `Chéo \\ (${matchLen} ô)`,
-              val, len: matchLen, points: val * matchLen,
-              start: { r: startCell.r, c: startCell.c },
-              end: { r: endCell.r, c: endCell.c }
-            });
-          }
-          matchLen = 1;
-        }
-      }
+      matchLen = 1;
     }
   }
+  return matches;
+}
 
-  // Diagonals Anti
-  for (let k = 0; k < 9 + 9 - 1; k++) {
-    let line = [];
-    for (let r = 0; r < 9; r++) {
-      let c = r - k + 8;
-      if (c >= 0 && c < 9) {
-        line.push({ r, c, val: board[r][c] });
-      }
-    }
-    if (line.length >= 3) {
-      let matchLen = 1;
-      for (let i = 0; i < line.length; i++) {
-        if (i < line.length - 1 && line[i].val !== null && line[i].val === line[i + 1].val) {
-          matchLen++;
-        } else {
-          if (matchLen >= 3) {
-            let val = line[i].val;
-            let startCell = line[i - matchLen + 1];
-            let endCell = line[i];
-
-            for (let m = i - matchLen + 1; m <= i; m++) {
-              let cell = line[m];
-              let key = `${cell.r},${cell.c}`;
-              let curr = matchedCellsMap.get(key) || { count: 0, val };
-              curr.count++;
-              matchedCellsMap.set(key, curr);
-            }
-
-            matchLines.push({
-              name: `Chéo / (${matchLen} ô)`,
-              val, len: matchLen, points: val * matchLen,
-              start: { r: startCell.r, c: startCell.c },
-              end: { r: endCell.r, c: endCell.c }
-            });
-          }
-          matchLen = 1;
-        }
-      }
+function scanDiagA(board, k) {
+  // k = r + c (labeled "Chéo \\" in game UI)
+  let line = [];
+  for (let r = 0; r < 9; r++) {
+    let c = k - r;
+    if (c >= 0 && c < 9) {
+      line.push({ r, c, val: board[r][c] });
     }
   }
+  return scanDiagLine(line, `diagA-${k}`, '\\');
+}
 
-  let totalScore = 0;
-  matchedCellsMap.forEach((info, key) => {
-    totalScore += info.val * info.count;
+function scanDiagB(board, k) {
+  // k = r - c + 8 (labeled "Chéo /" in game UI)
+  let line = [];
+  for (let r = 0; r < 9; r++) {
+    let c = r - k + 8;
+    if (c >= 0 && c < 9) {
+      line.push({ r, c, val: board[r][c] });
+    }
+  }
+  return scanDiagLine(line, `diagB-${k}`, '/');
+}
+
+function scanDiagLine(line, lineId, symbol) {
+  let matches = [];
+  if (line.length < 3) return matches;
+
+  let matchLen = 1;
+  for (let i = 0; i < line.length; i++) {
+    if (i < line.length - 1 && line[i].val !== null && line[i].val === line[i + 1].val) {
+      matchLen++;
+    } else {
+      if (matchLen >= 3) {
+        let val = line[i].val;
+        let startCell = line[i - matchLen + 1];
+        let endCell = line[i];
+        matches.push({
+          lineId,
+          name: `Chéo ${symbol} (${matchLen} ô)`,
+          val, len: matchLen, points: val * matchLen,
+          start: { r: startCell.r, c: startCell.c },
+          end: { r: endCell.r, c: endCell.c }
+        });
+      }
+      matchLen = 1;
+    }
+  }
+  return matches;
+}
+
+/**
+ * Incremental scoring: only re-scan lines affected by the newly placed coords.
+ * @param {Array} board - 9x9 board
+ * @param {Array} placedCoords - array of {r, c} for the cells just placed
+ * @param {Array} existingMatchLines - previous matchLines from player state
+ * @returns {{ totalScore: number, matchLines: Array }}
+ */
+function calculateScoreIncremental(board, placedCoords, existingMatchLines) {
+  let affectedIds = getAffectedLineIds(placedCoords);
+
+  // Keep match lines from unaffected rows/cols/diags
+  let keptLines = (existingMatchLines || []).filter(ml => !affectedIds.has(ml.lineId));
+
+  // Re-scan only affected lines
+  let newLines = [];
+  affectedIds.forEach(id => {
+    let parts = id.split('-');
+    let type = parts[0];
+    let idx = parseInt(parts[1]);
+
+    if (type === 'row') {
+      newLines.push(...scanRow(board, idx));
+    } else if (type === 'col') {
+      newLines.push(...scanCol(board, idx));
+    } else if (type === 'diagA') {
+      newLines.push(...scanDiagA(board, idx));
+    } else if (type === 'diagB') {
+      newLines.push(...scanDiagB(board, idx));
+    }
   });
 
+  let allLines = [...keptLines, ...newLines];
+  let totalScore = allLines.reduce((sum, ml) => sum + ml.points, 0);
+
+  return { totalScore, matchLines: allLines };
+}
+
+/**
+ * Full board scan (kept as fallback/verification).
+ */
+function calculateScoreForBoard(board) {
+  let matchLines = [];
+  for (let r = 0; r < 9; r++) matchLines.push(...scanRow(board, r));
+  for (let c = 0; c < 9; c++) matchLines.push(...scanCol(board, c));
+  for (let k = 0; k < 17; k++) matchLines.push(...scanDiagA(board, k));
+  for (let k = 0; k < 17; k++) matchLines.push(...scanDiagB(board, k));
+
+  let totalScore = matchLines.reduce((sum, ml) => sum + ml.points, 0);
   return { totalScore, matchLines };
 }
 
@@ -202,5 +211,6 @@ module.exports = {
   generateFairPieceDeck,
   createNewRoomState,
   createPlayerState,
-  calculateScoreForBoard
+  calculateScoreForBoard,
+  calculateScoreIncremental
 };

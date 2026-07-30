@@ -3,7 +3,7 @@ var socket = io();
 // --- SOCKET LISTENERS ---
 socket.on('connect', () => {
   log('🟢 Đã kết nối thành công tới Server Node.js!', 'server');
-  showToast('🟢 Đã kết nối thành công tới Server WebSocket!');
+  showToast('🟢 Kết nối thành công tới Đấu Trường Ponos, nơi bạn tỏa sáng!');
 });
 
 socket.on('assigned_role', ({ playerIndex, roomCode }) => {
@@ -140,26 +140,37 @@ document.getElementById('btn-start-game-server').addEventListener('click', () =>
 });
 
 document.getElementById('btn-leave-room').addEventListener('click', () => {
+  if (currentRoomCode) {
+    socket.emit('leave_room', { roomCode: currentRoomCode });
+    currentRoomCode = '';
+  }
   document.getElementById('lobby-setup-view').style.display = 'flex';
   document.getElementById('lobby-room-view').style.display = 'none';
   hasJoinedRoom = false;
   showToast('🟢 Chọn tên & nhập mã phòng mới để vào phòng!');
 });
 
-document.getElementById('btn-open-lobby-modal').addEventListener('click', () => {
-  lobbyModalEl.style.display = 'flex';
-  if (hasJoinedRoom) {
-    document.getElementById('lobby-setup-view').style.display = 'none';
-    document.getElementById('lobby-room-view').style.display = 'flex';
-  } else {
-    document.getElementById('lobby-setup-view').style.display = 'flex';
-    document.getElementById('lobby-room-view').style.display = 'none';
-  }
-});
+let btnOpenLobby = document.getElementById('btn-open-lobby-modal');
+if (btnOpenLobby) {
+  btnOpenLobby.addEventListener('click', () => {
+    lobbyModalEl.style.display = 'flex';
+    if (hasJoinedRoom) {
+      document.getElementById('lobby-setup-view').style.display = 'none';
+      document.getElementById('lobby-room-view').style.display = 'flex';
+    } else {
+      document.getElementById('lobby-setup-view').style.display = 'flex';
+      document.getElementById('lobby-room-view').style.display = 'none';
+    }
+  });
+}
 
 document.getElementById('btn-modal-restart').addEventListener('click', () => {
   document.getElementById('victory-modal').classList.remove('active');
   lobbyModalEl.style.display = 'flex';
+});
+
+document.getElementById('btn-close-victory').addEventListener('click', () => {
+  document.getElementById('victory-modal').classList.remove('active');
 });
 
 // INIT GRID UI AT STARTUP

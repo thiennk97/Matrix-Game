@@ -1,29 +1,81 @@
 const { TOTAL_SLOTS, VERTICAL_SLOTS } = require('./constants');
-const { calculateScoreForBoard } = require('./gameLogic');
+const { calculateScoreIncremental } = require('./gameLogic');
 
 const rooms = {};
 
-function getPublicRoomState(room) {
-  let currentPiece = room.turn < room.sharedPieceDeck.length ? room.sharedPieceDeck[room.turn] : [7, 8, 9];
+/**
+ * Build lightweight player info (no board/matchedLines) for "other" players.
+ */
+function getLightweightPlayers(room) {
+  return room.players.map(p => ({
+    socketId: p.socketId,
+    name: p.name,
+    ready: p.ready,
+    connected: !!p.socketId,
+    score: p.score,
+    hasPlacedThisRound: p.hasPlacedThisRound
+  }));
+}
+
+/**
+ * Build the shared (non-player-specific) state fields.
+ */
+function getBaseState(room) {
   return {
     roomCode: room.roomCode,
-    players: room.players.map(p => ({
-      socketId: p.socketId,
-      name: p.name,
-      ready: p.ready,
-      connected: !!p.socketId,
-      board: p.board,
-      score: p.score,
-      hasPlacedThisRound: p.hasPlacedThisRound,
-      matchedLines: p.matchedLines
-    })),
     turn: room.turn,
-    currentPiece: currentPiece,
+    currentPiece: room.turn < room.sharedPieceDeck.length ? room.sharedPieceDeck[room.turn] : [7, 8, 9],
     timeLeft: room.timeLeft,
     turnTimeLimit: room.turnTimeLimit,
     isGameStarted: room.isGameStarted,
     isGameOver: room.isGameOver
   };
+}
+
+/**
+ * Send personalized state to each player.
+ * Each player receives their OWN board + matchedLines,
+ * but only lightweight info (name, score, status) for other players.
+ * This cuts payload by ~87% for 8-player games.
+ */
+function emitRoomState(io, room) {
+  let basePlayers = getLightweightPlayers(room);
+  let baseState = getBaseState(room);
+
+  room.players.forEach((p, idx) => {
+    if (!p.socketId) return;
+
+    // Clone basePlayers and inject this player's own board + matchedLines
+    let personalPlayers = basePlayers.map((bp, i) => {
+      if (i === idx) {
+        return { ...bp, board: p.board, matchedLines: p.matchedLines };
+      }
+      return bp;
+    });
+
+    io.to(p.socketId).emit('room_state_update', {
+      ...baseState,
+      players: personalPlayers
+    });
+  });
+}
+
+/**
+ * Full state for a specific player (used for single-socket events like join).
+ */
+function getStateForPlayer(room, playerIdx) {
+  let basePlayers = getLightweightPlayers(room);
+  let baseState = getBaseState(room);
+
+  let personalPlayers = basePlayers.map((bp, i) => {
+    if (i === playerIdx) {
+      let p = room.players[i];
+      return { ...bp, board: p.board, matchedLines: p.matchedLines };
+    }
+    return bp;
+  });
+
+  return { ...baseState, players: personalPlayers };
 }
 
 function startServerTurnTimer(io, roomCode) {
@@ -40,7 +92,7 @@ function startServerTurnTimer(io, roomCode) {
     p.hasPlacedThisRound = false;
   });
 
-  io.to(roomCode).emit('room_state_update', getPublicRoomState(room));
+  emitRoomState(io, room);
 
   room.timerInterval = setInterval(() => {
     room.timeLeft -= 0.1;
@@ -76,7 +128,7 @@ function advanceNextTurnServer(io, roomCode) {
         coords.forEach((coord, idx) => {
           player.board[coord.r][coord.c] = pieceValues[idx];
         });
-        let res = calculateScoreForBoard(player.board);
+        let res = calculateScoreIncremental(player.board, coords, player.matchedLines);
         player.score = res.totalScore;
         player.matchedLines = res.matchLines;
       }
@@ -93,13 +145,28 @@ function advanceNextTurnServer(io, roomCode) {
     startServerTurnTimer(io, roomCode);
   } else {
     room.isGameOver = true;
-    io.to(roomCode).emit('game_over', getPublicRoomState(room));
+    // Game over: send personalized final state
+    emitRoomState(io, room);
+    io.to(roomCode).emit('game_over', { ...getBaseState(room), players: getLightweightPlayers(room) });
+    
+    // Explicitly release memory after match
+    setTimeout(() => {
+      if (rooms[roomCode] && rooms[roomCode].isGameOver) {
+        console.log(`🧹 Releasing memory for Room [${roomCode}] after match...`);
+        rooms[roomCode].sharedPieceDeck = [];
+        rooms[roomCode].players.forEach(p => {
+          p.board = [];
+          p.matchedLines = [];
+        });
+      }
+    }, 10000);
   }
 }
 
 module.exports = {
   rooms,
-  getPublicRoomState,
+  emitRoomState,
+  getStateForPlayer,
   startServerTurnTimer,
   advanceNextTurnServer
 };
