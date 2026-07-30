@@ -149,7 +149,7 @@ function advanceNextTurnServer(io, roomCode) {
     emitRoomState(io, room);
     io.to(roomCode).emit('game_over', { ...getBaseState(room), players: getLightweightPlayers(room) });
     
-    // Explicitly release memory after match
+    // Explicitly release memory after match to prevent lag
     setTimeout(() => {
       if (rooms[roomCode] && rooms[roomCode].isGameOver) {
         console.log(`🧹 Releasing memory for Room [${roomCode}] after match...`);
@@ -159,7 +159,7 @@ function advanceNextTurnServer(io, roomCode) {
           p.matchedLines = [];
         });
       }
-    }, 10000);
+    }, 10000); // 10s delay so players can see the final board before cleanup
   }
 }
 
