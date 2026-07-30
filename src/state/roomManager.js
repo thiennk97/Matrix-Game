@@ -1,5 +1,5 @@
-const { TOTAL_SLOTS, VERTICAL_SLOTS } = require('./constants');
-const { calculateScoreIncremental } = require('./gameLogic');
+const { TOTAL_SLOTS, VERTICAL_SLOTS } = require('../config/constants');
+const { calculateScoreIncremental } = require('../core/gameLogic');
 
 const rooms = {};
 
@@ -87,6 +87,8 @@ function startServerTurnTimer(io, roomCode) {
   }
 
   room.timeLeft = room.turnTimeLimit;
+  room.turnStartedAt = Date.now();
+
   // Reset hasPlacedThisRound for all players
   room.players.forEach(p => {
     p.hasPlacedThisRound = false;
@@ -95,7 +97,9 @@ function startServerTurnTimer(io, roomCode) {
   emitRoomState(io, room);
 
   room.timerInterval = setInterval(() => {
-    room.timeLeft -= 0.1;
+    let elapsed = (Date.now() - room.turnStartedAt) / 1000;
+    room.timeLeft = Math.max(0, room.turnTimeLimit - elapsed);
+
     if (room.timeLeft <= 0) {
       room.timeLeft = 0;
       clearInterval(room.timerInterval);

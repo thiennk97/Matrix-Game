@@ -2,6 +2,7 @@ var myPlayerIndex = -1;
 var currentRoomCode = '';
 var localRoomState = null;
 var hasJoinedRoom = false;
+var pieceDisplayEl = document.getElementById('current-piece-display');
 
 var lastHoveredR = -1;
 var lastHoveredC = -1;
@@ -34,9 +35,18 @@ function handleCellHover(r, c, isHover) {
       clearTimeout(hoverTimeout);
       hoverTimeout = null;
     }
-    lastHoveredR = r;
-    lastHoveredC = c;
-    render(localRoomState);
+    
+    let oldSlotIdx = (lastHoveredC >= 0 && lastHoveredR >= 0) ? (lastHoveredC * 3 + Math.floor(lastHoveredR / 3)) : -1;
+    let newSlotIdx = c * 3 + Math.floor(r / 3);
+    
+    if (oldSlotIdx !== newSlotIdx || lastHoveredR === -1) {
+      lastHoveredR = r;
+      lastHoveredC = c;
+      render(localRoomState);
+    } else {
+      lastHoveredR = r;
+      lastHoveredC = c;
+    }
   } else {
     if (hoverTimeout) {
       clearTimeout(hoverTimeout);
@@ -46,7 +56,7 @@ function handleCellHover(r, c, isHover) {
       lastHoveredR = -1;
       lastHoveredC = -1;
       render(localRoomState);
-    }, 15);
+    }, 50);
   }
 }
 
@@ -152,15 +162,47 @@ function render(state) {
       }
     }
 
-    // Hover piece
-    if (!state.isGameOver && !myHasPlaced && hoverPiece && lastHoveredR >= 0 && lastHoveredC >= 0) {
+    // Hover piece smooth transition
+    let isHovering = (!state.isGameOver && !myHasPlaced && hoverPiece && lastHoveredR >= 0 && lastHoveredC >= 0);
+    let hoverCoords = null;
+    
+    if (isHovering) {
       let slotIdx = lastHoveredC * 3 + Math.floor(lastHoveredR / 3);
-      let coords = VERTICAL_SLOTS[slotIdx];
-      if (coords && coords.every(coord => (myBoard[coord.r] && myBoard[coord.r][coord.c] === null))) {
-        coords.forEach(coord => {
-          cellColor[coord.r][coord.c] = 0xfef08a;
-        });
+      hoverCoords = VERTICAL_SLOTS[slotIdx];
+      if (!hoverCoords || !hoverCoords.every(coord => (myBoard[coord.r] && myBoard[coord.r][coord.c] === null))) {
+        isHovering = false;
       }
+    }
+
+    if (isHovering && window.pixiHoverOverlay) {
+      let posTop = getCellPos(hoverCoords[0].r, hoverCoords[0].c);
+      let posBot = getCellPos(hoverCoords[2].r, hoverCoords[2].c);
+      
+      pixiHoverOverlay.targetX = posTop.x;
+      pixiHoverOverlay.targetY = posTop.y;
+      pixiHoverOverlay.targetAlpha = 1;
+      
+      let bgHeight = (posBot.y + posBot.width) - posTop.y;
+      let bg = pixiHoverOverlay.children[0];
+      bg.clear();
+      bg.beginFill(0xfef08a);
+      bg.drawRect(0, 0, posTop.width, bgHeight);
+      bg.endFill();
+
+      hoverCoords.forEach((coord, i) => {
+        let p = getCellPos(coord.r, coord.c);
+        let t = pixiHoverOverlay.texts[i];
+        t.text = hoverPiece[i];
+        t.x = posTop.width / 2;
+        t.y = (p.y - posTop.y) + p.width / 2;
+      });
+      
+      if (pixiHoverOverlay.alpha < 0.05) {
+        pixiHoverOverlay.x = posTop.x;
+        pixiHoverOverlay.y = posTop.y;
+      }
+    } else if (window.pixiHoverOverlay) {
+      pixiHoverOverlay.targetAlpha = 0;
     }
 
     // Update board
@@ -179,9 +221,8 @@ function render(state) {
           }
 
           // Text
-          let val = (myBoard && myBoard[r]) ? myBoard[r][c] : null;
-          if (val !== null) {
-            pCell.text.text = val;
+          if (myBoard[r][c] !== null) {
+            pCell.text.text = myBoard[r][c];
             pCell.text.style.fill = '#1a1a1a';
             pCell.text.alpha = 1;
           } else {
@@ -235,21 +276,7 @@ function render(state) {
     pixiGridContainer.cursor = 'default';
   }
   
-  // Draw hovering text explicitly
-  if (!state.isGameOver && !myHasPlaced && hoverPiece && lastHoveredR >= 0 && lastHoveredC >= 0) {
-    let slotIdx = lastHoveredC * 3 + Math.floor(lastHoveredR / 3);
-    let coords = VERTICAL_SLOTS[slotIdx];
-    if (coords && coords.every(coord => (myBoard[coord.r] && myBoard[coord.r][coord.c] === null))) {
-      coords.forEach((coord, i) => {
-        let pCell = pixiCells[coord.r * 9 + coord.c];
-        if (pCell) {
-          pCell.text.text = hoverPiece[i];
-          pCell.text.style.fill = '#1e293b';
-          pCell.text.alpha = 0.6;
-        }
-      });
-    }
-  }
+  // Removed explicit hover text drawing as it is now handled by pixiHoverOverlay
 
   }
 
