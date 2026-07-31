@@ -248,10 +248,7 @@ header {
   z-index: 15;
 }
 
-.num-7, .num-8, .num-9, .num-10 { 
-  background: #facc15 !important; 
-  color: #000 !important; 
-}
+
 
 /* --- Piece Panel & Timer --- */
 .piece-panel {
@@ -301,7 +298,7 @@ header {
   gap: 2px;
   background: transparent;
   padding: 0;
-  border-radius: 4px;
+  border-radius: 0;
   border: none;
   min-height: 130px;
   justify-content: center;
@@ -461,6 +458,7 @@ header {
   padding: 1px;
   border-radius: 2px;
   border: 1px solid #000;
+  position: relative;
 }
 
 .mini-cell {

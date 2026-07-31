@@ -86,9 +86,32 @@ function updateUI(state) {
     sorted.sort((a, b) => b.score - a.score);
     sorted.forEach((p, rank) => {
       let color = PLAYER_COLORS[p.originalIdx] || '#a8a29e';
+      let bgColor = 'rgba(255, 255, 255, 0.03)';
+      let borderColor = 'rgba(255, 255, 255, 0.06)';
+      let rgbVals = null;
+
+      if (color.startsWith('rgb(')) {
+        rgbVals = color.match(/\d+/g);
+      } else if (color.startsWith('#')) {
+        let h = color.replace('#', '');
+        if(h.length === 3) h = h.split('').map(c=>c+c).join('');
+        rgbVals = [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
+      }
+
+      if (rgbVals && rgbVals.length >= 3) {
+        bgColor = `rgba(${rgbVals[0]}, ${rgbVals[1]}, ${rgbVals[2]}, 0.15)`;
+        borderColor = `rgba(${rgbVals[0]}, ${rgbVals[1]}, ${rgbVals[2]}, 0.4)`;
+      }
+
       let isMe = (p.originalIdx === myPlayerIndex);
       let card = document.createElement('div');
       card.className = 'status-player-card' + (isMe ? ' is-me' : '');
+      card.style.background = bgColor;
+      card.style.borderColor = borderColor;
+      if (isMe && rgbVals && rgbVals.length >= 3) {
+        card.style.boxShadow = `0 0 12px rgba(${rgbVals[0]}, ${rgbVals[1]}, ${rgbVals[2]}, 0.5)`;
+      }
+      
       card.innerHTML = `
         <div class="status-player-name" style="color: ${color};">${isMe ? '⭐ ' : ''}${p.name}</div>
         <div class="status-player-score" style="color: ${color};">${p.score}</div>
