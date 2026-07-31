@@ -11,24 +11,18 @@ function renderOpponentBoards(state) {
   section.style.display = '';
 
   let opIdx = 0;
-  let bgColors = [
-    'rgba(251, 191, 36, 0.15)',
-    'rgba(248, 113, 113, 0.15)',
-    'rgba(45, 212, 191, 0.15)',
-    'rgba(56, 189, 248, 0.15)'
-  ];
-  let borderColors = [
-    'rgba(251, 191, 36, 0.3)',
-    'rgba(248, 113, 113, 0.3)',
-    'rgba(45, 212, 191, 0.3)',
-    'rgba(56, 189, 248, 0.3)'
-  ];
-  let solidColors = [
+  let solidColors = typeof PLAYER_COLORS !== 'undefined' ? PLAYER_COLORS : [
     'rgb(251, 191, 36)',
     'rgb(248, 113, 113)',
     'rgb(45, 212, 191)',
-    'rgb(56, 189, 248)'
+    'rgb(56, 189, 248)',
+    'rgb(167, 139, 250)',
+    'rgb(251, 146, 60)',
+    'rgb(74, 222, 128)',
+    'rgb(244, 114, 182)'
   ];
+  let bgColors = solidColors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.15)'));
+  let borderColors = solidColors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.3)'));
 
   let currentActiveSockets = new Set();
 
@@ -41,15 +35,15 @@ function renderOpponentBoards(state) {
     let cardId = 'opponent-board-' + p.socketId;
     let card = document.getElementById(cardId);
     
-    let themeIdx = opIdx % 4;
-    let themeColor = solidColors[themeIdx];
+    let mappedIdx = (state.colorMapping && state.colorMapping[idx] !== undefined) ? state.colorMapping[idx] : (idx % 8);
+    let themeColor = solidColors[mappedIdx];
 
     if (!card) {
       card = document.createElement('div');
       card.className = 'opponent-board-card';
       card.id = cardId;
-      card.style.background = bgColors[themeIdx];
-      card.style.borderColor = borderColors[themeIdx];
+      card.style.background = bgColors[mappedIdx];
+      card.style.borderColor = borderColors[mappedIdx];
 
       let nameEl = document.createElement('div');
       nameEl.className = 'ob-name';
@@ -102,10 +96,14 @@ function renderOpponentBoards(state) {
           if (val !== null) {
             if (cell.textContent != val) cell.textContent = val;
             cell.style.background = themeColor;
+            cell.style.boxShadow = `0 0 0 1px ${themeColor}`;
+            cell.style.zIndex = '10';
             cell.style.color = '#000';
           } else {
             if (cell.textContent != "") cell.textContent = '';
             cell.style.background = '#fff';
+            cell.style.boxShadow = 'none';
+            cell.style.zIndex = '1';
             cell.style.color = '#000';
           }
         }

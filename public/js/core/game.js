@@ -138,7 +138,8 @@ function renderPieceDisplay(state) {
   
   let myColorStr = '#fbbf24';
   if (typeof PLAYER_COLORS !== 'undefined' && myPlayerIndex >= 0) {
-    myColorStr = PLAYER_COLORS[myPlayerIndex] || '#fbbf24';
+    let mappedIdx = (state.colorMapping && state.colorMapping[myPlayerIndex] !== undefined) ? state.colorMapping[myPlayerIndex] : myPlayerIndex;
+    myColorStr = PLAYER_COLORS[mappedIdx] || '#fbbf24';
   }
   pieceDisplayEl.style.background = myColorStr;
 
@@ -164,9 +165,10 @@ function render(state) {
   if (pixiCells && pixiCells.length === 81) {
     let myColorHex = 0xfacc15;
     let myHoverHex = 0xfef08a;
-    let myTextColor = '#854d0e';
+    let myTextColor = '#1a1a1a';
     if (typeof PLAYER_COLORS !== 'undefined' && myPlayerIndex >= 0) {
-      let myColor = PLAYER_COLORS[myPlayerIndex];
+      let mappedIdx = (state.colorMapping && state.colorMapping[myPlayerIndex] !== undefined) ? state.colorMapping[myPlayerIndex] : myPlayerIndex;
+      let myColor = PLAYER_COLORS[mappedIdx];
       if (myColor) {
         let r=250, g=204, b=21;
         if (myColor.startsWith('rgb(')) {

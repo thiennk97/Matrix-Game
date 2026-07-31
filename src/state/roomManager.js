@@ -30,35 +30,20 @@ function getBaseState(room) {
     timeLeft: room.timeLeft,
     turnTimeLimit: room.turnTimeLimit,
     isGameStarted: room.isGameStarted,
-    isGameOver: room.isGameOver
+    isGameOver: room.isGameOver,
+    colorMapping: room.colorMapping
   };
 }
 
-/**
- * Send personalized state to each player.
- * Each player receives their OWN board + matchedLines,
- * but only lightweight info (name, score, status) for other players.
- * This cuts payload by ~87% for 8-player games.
- */
 function emitRoomState(io, room) {
   let basePlayers = getLightweightPlayers(room);
   let baseState = getBaseState(room);
 
-  room.players.forEach((p, idx) => {
-    if (!p.socketId) return;
-
-    // Clone basePlayers and inject this player's own board + matchedLines
-    let personalPlayers = basePlayers.map((bp, i) => {
-      if (i === idx) {
-        return { ...bp, board: p.board, matchedLines: p.matchedLines };
-      }
-      return bp;
-    });
-
-    io.to(p.socketId).emit('room_state_update', {
-      ...baseState,
-      players: personalPlayers
-    });
+  // We actually need board and matchedLines for ALL players now,
+  // so the opponent mini-boards can render correctly on all clients.
+  io.to(room.roomCode).emit('room_state_update', {
+    ...baseState,
+    players: basePlayers
   });
 }
 
@@ -69,15 +54,9 @@ function getStateForPlayer(room, playerIdx) {
   let basePlayers = getLightweightPlayers(room);
   let baseState = getBaseState(room);
 
-  let personalPlayers = basePlayers.map((bp, i) => {
-    if (i === playerIdx) {
-      let p = room.players[i];
-      return { ...bp, board: p.board, matchedLines: p.matchedLines };
-    }
-    return bp;
-  });
-
-  return { ...baseState, players: personalPlayers };
+  // We actually need board and matchedLines for ALL players now,
+  // so the opponent mini-boards can render correctly.
+  return { ...baseState, players: basePlayers };
 }
 
 function startServerTurnTimer(io, roomCode) {

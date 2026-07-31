@@ -26,6 +26,16 @@ function createPlayerState(socketId, name) {
   };
 }
 
+function shuffle(array) {
+  let currentIndex = array.length, randomIndex;
+  while (currentIndex != 0) {
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
 function createNewRoomState(roomCode) {
   return {
     roomCode: roomCode,
@@ -36,7 +46,8 @@ function createNewRoomState(roomCode) {
     turnTimeLimit: TURN_TIME_LIMIT,
     timerInterval: null,
     isGameStarted: false,
-    isGameOver: false
+    isGameOver: false,
+    colorMapping: shuffle([0, 1, 2, 3, 4, 5, 6, 7])
   };
 }
 

@@ -471,6 +471,7 @@ header {
   font-weight: 800;
   font-family: 'Plus Jakarta Sans', sans-serif;
   color: #000;
+  position: relative;
 }
 
 /* --- Form Controls --- */

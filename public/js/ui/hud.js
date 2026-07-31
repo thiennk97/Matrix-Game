@@ -33,9 +33,16 @@ function renderScoreBreakdown(state) {
     let row = document.createElement('div');
     row.className = 'match-item active';
     let isMe = socket && p.socketId === socket.id;
+    
+    let originalIndex = state.players.findIndex(sp => sp.socketId === p.socketId);
+    let mappedIdx = (state.colorMapping && state.colorMapping[originalIndex] !== undefined) ? state.colorMapping[originalIndex] : originalIndex;
+    let pColor = (typeof PLAYER_COLORS !== 'undefined' && mappedIdx >= 0) ? PLAYER_COLORS[mappedIdx] : '#fbbf24';
+    let pColorRgbaBg = pColor.replace('rgb', 'rgba').replace(')', ', 0.1)');
+    let pColorRgbaBorder = pColor.replace('rgb', 'rgba').replace(')', ', 0.3)');
+
     if (isMe) {
-      row.style.background = 'rgba(251, 191, 36, 0.1)';
-      row.style.borderColor = 'rgba(251, 191, 36, 0.3)';
+      row.style.background = pColorRgbaBg;
+      row.style.borderColor = pColorRgbaBorder;
     } else {
       row.style.cursor = 'pointer';
       row.onclick = () => {
@@ -43,7 +50,7 @@ function renderScoreBreakdown(state) {
           let target = document.getElementById('opponent-board-' + p.socketId);
           if (target) {
             target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            target.style.boxShadow = '0 0 20px var(--matchbox-cyan)';
+            target.style.boxShadow = `0 0 20px ${pColor}`;
             setTimeout(() => target.style.boxShadow = '', 2000);
           }
         }
@@ -52,9 +59,9 @@ function renderScoreBreakdown(state) {
     
     row.innerHTML = `
       <div>
-        <strong style="color: ${isMe ? '#fbbf24' : '#e2e8f0'};">Hạng ${index + 1}: ${p.name || 'Unknown'}</strong>
+        <strong style="color: ${isMe ? pColor : '#e2e8f0'};">Hạng ${index + 1}: ${p.name || 'Unknown'}</strong>
       </div>
-      <div class="match-tag" style="background: ${isMe ? '#fbbf24' : 'rgba(255,255,255,0.1)'}; color: ${isMe ? '#000' : '#fff'};">${p.score || 0} PTS</div>
+      <div class="match-tag" style="background: ${isMe ? pColor : 'rgba(255,255,255,0.1)'}; color: ${isMe ? '#000' : '#fff'};">${p.score || 0} PTS</div>
     `;
     matchListEl.appendChild(row);
   });

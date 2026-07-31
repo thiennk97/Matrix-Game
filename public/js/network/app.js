@@ -37,7 +37,6 @@ socket.on('room_state_update', (state) => {
       window.isClickBlocked = false;
     }, 500);
   }
-
   localRoomState = state;
   updateUI(state);
   renderPieceDisplay(state);
@@ -81,7 +80,8 @@ socket.on('game_over', (state) => {
   let scoresHtml = sorted.map((p, i) => {
     let barWidth = maxScore > 0 ? Math.max(8, Math.round((p.score / maxScore) * 100)) : 8;
     
-    let baseColor = PLAYER_COLORS[p.originalIdx] || '#a8a29e';
+    let mappedIdx = (state.colorMapping && state.colorMapping[p.originalIdx] !== undefined) ? state.colorMapping[p.originalIdx] : p.originalIdx;
+    let baseColor = PLAYER_COLORS[mappedIdx] || '#a8a29e';
     let bgColor = 'rgba(168,162,158,0.06)';
     
     if (baseColor.startsWith('rgb(')) {
