@@ -13,7 +13,9 @@ function getLightweightPlayers(room) {
     ready: p.ready,
     connected: !!p.socketId,
     score: p.score,
-    hasPlacedThisRound: p.hasPlacedThisRound
+    hasPlacedThisRound: p.hasPlacedThisRound,
+    board: p.board,
+    matchedLines: p.matchedLines
   }));
 }
 

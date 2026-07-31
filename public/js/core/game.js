@@ -121,6 +121,12 @@ function renderPieceDisplay(state) {
     pieceDisplayEl.innerHTML = `<div style="font-size: 0.8rem; color: #a8a29e; text-align: center;">Chưa bắt đầu ván mới...</div>`;
     return;
   }
+  
+  if (state.isGameOver) {
+    pieceDisplayEl.innerHTML = `<div style="font-size: 0.8rem; color: #a8a29e; text-align: center;">Trận đấu đã kết thúc</div>`;
+    pieceDisplayEl.style.background = 'transparent';
+    return;
+  }
 
   pieceDisplayEl.className = 'current-piece-vertical';
 
@@ -130,7 +136,11 @@ function renderPieceDisplay(state) {
     return;
   }
   
-  pieceDisplayEl.style.background = '#fbbf24';
+  let myColorStr = '#fbbf24';
+  if (typeof PLAYER_COLORS !== 'undefined' && myPlayerIndex >= 0) {
+    myColorStr = PLAYER_COLORS[myPlayerIndex] || '#fbbf24';
+  }
+  pieceDisplayEl.style.background = myColorStr;
 
   state.currentPiece.forEach(num => {
     let box = document.createElement('div');
@@ -152,12 +162,33 @@ function render(state) {
   let hoverPiece = state.currentPiece;
 
   if (pixiCells && pixiCells.length === 81) {
+    let myColorHex = 0xfacc15;
+    let myHoverHex = 0xfef08a;
+    let myTextColor = '#854d0e';
+    if (typeof PLAYER_COLORS !== 'undefined' && myPlayerIndex >= 0) {
+      let myColor = PLAYER_COLORS[myPlayerIndex];
+      if (myColor) {
+        let r=250, g=204, b=21;
+        if (myColor.startsWith('rgb(')) {
+          let rgbVals = myColor.match(/\d+/g).map(Number);
+          r = rgbVals[0]; g = rgbVals[1]; b = rgbVals[2];
+        } else if (myColor.startsWith('#')) {
+          let h = myColor.replace('#', '');
+          if(h.length === 3) h = h.split('').map(c=>c+c).join('');
+          r = parseInt(h.substr(0,2),16); g = parseInt(h.substr(2,2),16); b = parseInt(h.substr(4,2),16);
+        }
+        myColorHex = (r << 16) | (g << 8) | b;
+        myHoverHex = myColorHex;
+        myTextColor = '#1a1a1a';
+      }
+    }
+
     // Compute cell colors
     let cellColor = Array(9).fill(null).map(() => Array(9).fill(null));
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         if (myBoard && myBoard[r] && myBoard[r][c] !== null) {
-          cellColor[r][c] = 0xfacc15;
+          cellColor[r][c] = myColorHex;
         }
       }
     }
@@ -185,13 +216,14 @@ function render(state) {
       let bgHeight = (posBot.y + posBot.width) - posTop.y;
       let bg = pixiHoverOverlay.children[0];
       bg.clear();
-      bg.beginFill(0xfef08a);
+      bg.beginFill(myHoverHex);
       bg.drawRect(0, 0, posTop.width, bgHeight);
       bg.endFill();
 
       hoverCoords.forEach((coord, i) => {
         let p = getCellPos(coord.r, coord.c);
         let t = pixiHoverOverlay.texts[i];
+        t.style.fill = myTextColor;
         t.text = hoverPiece[i];
         t.x = posTop.width / 2;
         t.y = (p.y - posTop.y) + p.width / 2;
@@ -235,7 +267,7 @@ function render(state) {
             let colorDown = (r < 8) ? cellColor[r+1][c] : null;
             if (color !== null && colorDown !== null) {
               pCell.gapCoverV.visible = true;
-              pCell.gapCoverV.tint = (color === 0xfacc15 || colorDown === 0xfacc15) ? 0xfacc15 : 0xfef08a;
+              pCell.gapCoverV.tint = myColorHex;
             } else {
               pCell.gapCoverV.visible = false;
             }
@@ -246,7 +278,7 @@ function render(state) {
             let colorRight = (c < 8) ? cellColor[r][c+1] : null;
             if (color !== null && colorRight !== null) {
               pCell.gapCoverH.visible = true;
-              pCell.gapCoverH.tint = (color === 0xfacc15 || colorRight === 0xfacc15) ? 0xfacc15 : 0xfef08a;
+              pCell.gapCoverH.tint = myColorHex;
             } else {
               pCell.gapCoverH.visible = false;
             }
@@ -259,7 +291,7 @@ function render(state) {
             let cDownRight = (r < 8 && c < 8) ? cellColor[r+1][c+1] : null;
             if (color !== null && cRight !== null && cDown !== null && cDownRight !== null) {
               pCell.gapCoverCross.visible = true;
-              pCell.gapCoverCross.tint = 0xfacc15;
+              pCell.gapCoverCross.tint = myColorHex;
             } else {
               pCell.gapCoverCross.visible = false;
             }

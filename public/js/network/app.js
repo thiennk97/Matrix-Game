@@ -65,7 +65,8 @@ socket.on('game_over', (state) => {
   render(state);
 
   // Sort players by score descending
-  let sorted = state.players.slice().sort((a, b) => b.score - a.score);
+  let sorted = state.players.map((p, idx) => ({ ...p, originalIdx: idx }));
+  sorted.sort((a, b) => b.score - a.score);
   let maxScore = sorted[0] ? sorted[0].score : 1;
   
   let winnerMsg = `🏆 ${sorted[0].name} LÀM BỐ!`;
@@ -75,22 +76,32 @@ socket.on('game_over', (state) => {
 
   document.getElementById('modal-winner').textContent = winnerMsg;
   
-  let rankColors = ['#fcd34d', '#c0c0c0', '#cd7f32', '#a8a29e', '#a8a29e', '#a8a29e', '#a8a29e', '#a8a29e'];
   let rankLabels = ['🥇 1', '🥈 2', '🥉 3', '4', '5', '6', '7', '8'];
-  let rankBg = [
-    'rgba(252,211,77,0.12)', 'rgba(192,192,192,0.10)', 'rgba(205,127,50,0.10)',
-    'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)',
-    'rgba(168,162,158,0.06)', 'rgba(168,162,158,0.06)'
-  ];
   
   let scoresHtml = sorted.map((p, i) => {
     let barWidth = maxScore > 0 ? Math.max(8, Math.round((p.score / maxScore) * 100)) : 8;
+    
+    let baseColor = PLAYER_COLORS[p.originalIdx] || '#a8a29e';
+    let bgColor = 'rgba(168,162,158,0.06)';
+    
+    if (baseColor.startsWith('rgb(')) {
+      let rgbVals = baseColor.match(/\d+/g);
+      if (rgbVals && rgbVals.length >= 3) {
+        bgColor = `rgba(${rgbVals[0]}, ${rgbVals[1]}, ${rgbVals[2]}, 0.12)`;
+      }
+    } else if (baseColor.startsWith('#')) {
+      let h = baseColor.replace('#', '');
+      if(h.length === 3) h = h.split('').map(c=>c+c).join('');
+      let rgbVals = [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16)];
+      bgColor = `rgba(${rgbVals[0]}, ${rgbVals[1]}, ${rgbVals[2]}, 0.12)`;
+    }
+    
     return `
-      <div class="rank-card" style="border-color:${rankColors[i]};background:${rankBg[i]};">
-        <div class="rank-badge" style="color:${rankColors[i]};">${rankLabels[i]}</div>
-        <div class="rank-name">${p.name}</div>
-        <div class="rank-score" style="color:${rankColors[i]};">${p.score}</div>
-        <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${barWidth}%;background:${rankColors[i]};"></div></div>
+      <div class="rank-card" style="border-color:${baseColor};background:${bgColor};">
+        <div class="rank-badge" style="color:${baseColor};">${rankLabels[i]}</div>
+        <div class="rank-name" style="color:${baseColor};">${p.name}</div>
+        <div class="rank-score" style="color:${baseColor};">${p.score}</div>
+        <div class="rank-bar-bg"><div class="rank-bar-fill" style="width:${barWidth}%;background:${baseColor};"></div></div>
       </div>`;
   }).join('');
   

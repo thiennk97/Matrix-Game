@@ -6,9 +6,9 @@ var pixiMatchGraphics;
 
 function getCellPos(r, c) {
   const CELL_W = 50;
-  const GAP = 1;          // 1px gap between normal cells
-  const BLOCK_GAP = 1;    // 1px extra gap between 3x3 blocks
-  const PADDING = 2;      // 2px padding around the board
+  const GAP = 1.5;
+  const BLOCK_GAP = 0.5;
+  const PADDING = 2;
 
   let blockRow = Math.floor(r / 3);
   let blockCol = Math.floor(c / 3);
@@ -26,8 +26,8 @@ function createGridUI() {
   if (pixiApp) return;
 
   pixiApp = new PIXI.Application({
-    width: 464,
-    height: 464,
+    width: 467,
+    height: 467,
     backgroundColor: 0xFFFFFF,
     resolution: window.devicePixelRatio || 1,
     autoDensity: true,
@@ -37,13 +37,13 @@ function createGridUI() {
   container.innerHTML = '';
   container.appendChild(pixiApp.view);
   
-  container.style.width = '464px';
-  container.style.height = '464px';
+  container.style.width = '467px';
+  container.style.height = '467px';
 
   // Background wrapper for the grid
   let gridBg = new PIXI.Graphics();
   gridBg.beginFill(0x1a1a1a);
-  gridBg.drawRect(0, 0, 464, 464);
+  gridBg.drawRect(0, 0, 467, 467);
   gridBg.endFill();
   pixiApp.stage.addChild(gridBg);
 
@@ -170,7 +170,7 @@ function renderSVGMatchLines(matchedLinesDetail) {
   if (!pixiMatchGraphics) return;
   pixiMatchGraphics.clear();
   if (!matchedLinesDetail || !matchedLinesDetail.length) return;
-  pixiMatchGraphics.lineStyle(3, 0x000000, 1);
+  pixiMatchGraphics.lineStyle(1.5, 0x000000, 1);
 
   matchedLinesDetail.forEach(lineInfo => {
     let pos1 = getCellPos(lineInfo.start.r, lineInfo.start.c);
