@@ -1,6 +1,6 @@
-const { VERTICAL_SLOTS, TOTAL_SLOTS } = require('./constants');
-const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreIncremental } = require('./gameLogic');
-const { rooms, emitRoomState, getStateForPlayer, startServerTurnTimer, advanceNextTurnServer } = require('./roomManager');
+const { VERTICAL_SLOTS, TOTAL_SLOTS } = require('../config/constants');
+const { createNewRoomState, createPlayerState, MAX_PLAYERS, generateFairPieceDeck, calculateScoreIncremental } = require('../core/gameLogic');
+const { rooms, emitRoomState, getStateForPlayer, startServerTurnTimer, advanceNextTurnServer } = require('../state/roomManager');
 
 function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -191,16 +191,16 @@ function registerSocketHandlers(io) {
       emitRoomState(io, room);
       console.log(`🎯 Player ${playerIndex + 1} placed piece (slot #${slotIdx}) in Room [${roomCode}]`);
 
-      // If all players have placed their piece, skip the timer ONLY on the last turn (27/27) to end game immediately
+      // If all players have placed their piece, skip the timer and advance immediately
       let allPlaced = room.players.every(p => p.hasPlacedThisRound);
-      if (allPlaced && room.turn === TOTAL_SLOTS - 1) {
+      if (allPlaced) {
         if (room.timerInterval) {
           clearInterval(room.timerInterval);
           room.timerInterval = null;
         }
         room.timeLeft = 0;
         advanceNextTurnServer(io, roomCode);
-        console.log(`⚡ All players placed pieces on final turn in Room [${roomCode}], ending game immediately.`);
+        console.log(`⚡ All players placed pieces in Room [${roomCode}] (turn ${room.turn}), advancing immediately.`);
       }
     });
 
@@ -229,6 +229,24 @@ function registerSocketHandlers(io) {
             emitRoomState(io, room);
           }
         }
+      }
+    });
+
+    socket.on('chat_message', (msg) => {
+      // Find the room this socket belongs to
+      let currentRoomCode = null;
+      let playerName = 'Ẩn danh';
+      for (const code in rooms) {
+        const p = rooms[code].players.find(p => p.socketId === socket.id);
+        if (p) {
+          currentRoomCode = code;
+          playerName = p.name;
+          break;
+        }
+      }
+      
+      if (currentRoomCode) {
+        io.to(currentRoomCode).emit('chat_message', { sender: playerName, msg: msg, id: socket.id });
       }
     });
 

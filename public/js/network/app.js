@@ -1,4 +1,5 @@
 var socket = io();
+const lobbyModalEl = document.getElementById('lobby-modal');
 
 // --- SOCKET LISTENERS ---
 socket.on('connect', () => {
@@ -58,6 +59,11 @@ socket.on('error_message', (msg) => {
 });
 
 socket.on('game_over', (state) => {
+  // Update UI to reflect the final board state (e.g. auto-placed pieces on last turn)
+  localRoomState = state;
+  updateUI(state);
+  render(state);
+
   // Sort players by score descending
   let sorted = state.players.slice().sort((a, b) => b.score - a.score);
   let maxScore = sorted[0] ? sorted[0].score : 1;
@@ -96,8 +102,9 @@ socket.on('game_over', (state) => {
 
 document.getElementById('btn-join-room').addEventListener('click', () => {
   let nameInput = document.getElementById('player-name-input');
+  let roomCodeInput = document.getElementById('room-code-input');
   let name = (nameInput ? nameInput.value : '').trim();
-  let code = 'GLOBAL';
+  let code = (roomCodeInput ? roomCodeInput.value : '').trim().toUpperCase() || 'GLOBAL';
 
   // Validate: tên bắt buộc
   if (!name || name.length === 0) {
@@ -175,3 +182,53 @@ document.getElementById('btn-close-victory').addEventListener('click', () => {
 
 // INIT GRID UI AT STARTUP
 createGridUI();
+
+// --- CHAT LOGIC ---
+const chatInput = document.getElementById('chat-input');
+const btnSendChat = document.getElementById('btn-send-chat');
+// chatMessagesEl is declared in hud.js
+const chatHeader = document.getElementById('chat-header');
+const chatWidget = document.getElementById('chat-widget');
+
+chatHeader.addEventListener('click', () => {
+  chatWidget.classList.toggle('collapsed');
+  document.getElementById('chat-toggle-icon').textContent = chatWidget.classList.contains('collapsed') ? '▲' : '▼';
+});
+
+function sendChatMessage() {
+  const text = chatInput.value.trim();
+  if (!text) return;
+  socket.emit('chat_message', text);
+  chatInput.value = '';
+}
+
+btnSendChat.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendChatMessage();
+});
+
+socket.on('chat_message', ({ sender, msg, id }) => {
+  if (!chatMessagesEl) return;
+  let item = document.createElement('div');
+  let isMe = id === socket.id;
+  item.className = `chat-msg ${isMe ? 'me' : 'other'}`;
+  
+  if (!isMe) {
+    let author = document.createElement('div');
+    author.className = 'chat-msg-author';
+    author.textContent = sender;
+    item.appendChild(author);
+  }
+  
+  let content = document.createElement('div');
+  content.textContent = msg;
+  item.appendChild(content);
+  
+  chatMessagesEl.appendChild(item);
+  
+  while (chatMessagesEl.children.length > 50) {
+    chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+  }
+  
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+});

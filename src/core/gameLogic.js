@@ -1,4 +1,4 @@
-const { TOTAL_SLOTS, NUM_MIN, NUM_MAX, TURN_TIME_LIMIT } = require('./constants');
+const { TOTAL_SLOTS, NUM_MIN, NUM_MAX, TURN_TIME_LIMIT } = require('../config/constants');
 
 const MAX_PLAYERS = 8;
 
