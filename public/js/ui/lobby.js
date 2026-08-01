@@ -1,103 +1,216 @@
-function showToast(msg) {
-  const bannerEl = document.getElementById('lobby-status-banner');
-  if (bannerEl) bannerEl.innerHTML = msg;
+var MAX_LOBBY_SLOTS = 8;
+var PLAYER_NAME_STORAGE_KEY = 'matrix-game-player-name';
+var READY_ICON_SVG =
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+var NOT_READY_ICON_SVG =
+  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 15 15"></polyline></svg>';
+
+window.isCreatingRoom = false;
+window.currentJoiningRoomCode = '';
+
+function loadStoredPlayerName() {
+  try {
+    return localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function saveStoredPlayerName(playerName) {
+  try {
+    localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+  } catch (error) {
+    return;
+  }
+}
+
+function openNameModal(roomCode = '', isCreate = false) {
+  window.currentJoiningRoomCode = roomCode;
+  window.isCreatingRoom = isCreate;
+
+  const title = isCreate ? 'TẠO PHÒNG MỚI' : 'THAM GIA PHÒNG';
+  const desc = isCreate
+    ? 'Nhập tên của bạn để tạo phòng mới'
+    : `Nhập tên để tham gia phòng ${roomCode}`;
+
+  document.getElementById('name-modal-title').textContent = title;
+  document.getElementById('name-modal-desc').textContent = desc;
+
+  const nameInput = document.getElementById('name-modal-input');
+  nameInput.value = loadStoredPlayerName();
+  nameInput.setCustomValidity('');
+  document.getElementById('name-modal').style.display = 'flex';
+  setTimeout(() => nameInput.focus(), 50);
+}
+
+function renderPublicRooms(rooms) {
+  const container = document.getElementById('public-rooms-container');
+  if (!container) return;
+
+  if (!rooms || rooms.length === 0) {
+    container.innerHTML =
+      '<div class="empty-state">Chưa có phòng nào đang mở.</div>';
+    return;
+  }
+
+  container.innerHTML = rooms
+    .map(
+      (r) => `
+    <div class="public-room-card">
+      <div class="room-card-header">
+        <span class="room-card-code">#${r.roomCode}</span>
+        <span class="room-card-players">${r.playerCount}/${
+        r.maxPlayers
+      } <i data-lucide="users" style="width:14px;height:14px;vertical-align:-2px"></i></span>
+      </div>
+      <div class="room-card-host">Host: ${escapeHtml(r.hostName)}</div>
+      <button class="btn btn-primary btn-sm btn-join-public" data-code="${r.roomCode}">
+        <i data-lucide="log-in" style="width:16px;height:16px;vertical-align:-3px"></i> Tham gia
+      </button>
+    </div>
+  `
+    )
+    .join('');
+
+  refreshIcons();
+
+  container.querySelectorAll('.btn-join-public').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const code = e.currentTarget.getAttribute('data-code');
+      openNameModal(code, false);
+    });
+  });
+}
+
+function findMyPlayerIndex(state) {
+  if (!state || !state.players) return -1;
+  return state.players.findIndex((p) => p.id === myPlayerId);
+}
+
+function buildLobbySlotHtml(player, isHostSlot, slotIndex) {
+  if (!player) {
+    return `
+      <div class="player-slot-card p${slotIndex + 1}-slot" style="display: none;">
+        <div class="slot-player-name"><i data-lucide="user" class="icon"></i> Chờ P${
+          slotIndex + 1
+        } vào...</div>
+        <div class="ready-tag not-ready">—</div>
+      </div>
+    `;
+  }
+
+  let readyHtml = '';
+  if (!isHostSlot) {
+    const readyClass = player.ready ? 'ready-tag is-ready' : 'ready-tag not-ready';
+    const readyIcon = player.ready ? READY_ICON_SVG : NOT_READY_ICON_SVG;
+    readyHtml = `<div class="${readyClass}">${readyIcon}</div>`;
+  }
+
+  const isMe = player.id === myPlayerId;
+  const youTag = isMe ? `<span class="you-tag">(Bạn)</span>` : '';
+  const disconnectedTag = !player.connected
+    ? `<span class="disconnected-tag" style="color:var(--matchbox-red); font-size:12px; margin-left:8px;">(Mất kết nối)</span>`
+    : '';
+
+  return `
+    <div class="player-slot-card p${slotIndex + 1}-slot" style="display: flex;">
+      <div class="slot-player-name">
+        <i data-lucide="user" class="icon"></i> ${escapeHtml(
+          player.name
+        )} ${youTag} ${disconnectedTag}
+      </div>
+      ${readyHtml}
+    </div>
+  `;
+}
+
+function renderLobbySlots(state) {
+  const grid = document.getElementById('lobby-players-grid');
+  if (!grid) return;
+
+  const playersBySeat = new Map(state.players.map((player) => [player.seatIndex, player]));
+  let html = '';
+  for (let i = 0; i < MAX_LOBBY_SLOTS; i++) {
+    const player = playersBySeat.get(i) || null;
+    html += buildLobbySlotHtml(player, player?.id === state.hostPlayerId, i);
+  }
+  grid.innerHTML = html;
+  refreshIcons();
+}
+
+function setReadyButtonState(btnReady, isReady) {
+  if (isReady) {
+    btnReady.innerHTML = iconHtml('x-circle') + ' HỦY SẴN SÀNG';
+    btnReady.className = 'btn';
+    btnReady.style.background = 'var(--matchbox-red)';
+    btnReady.style.color = '#fff';
+    btnReady.style.borderColor = 'var(--matchbox-red)';
+  } else {
+    btnReady.innerHTML = iconHtml('zap') + ' SẴN SÀNG';
+    btnReady.className = 'btn btn-green';
+    btnReady.style.background = '';
+    btnReady.style.color = '';
+    btnReady.style.borderColor = '';
+  }
+}
+
+function updateHostControls(isHost, myPlayerData) {
+  const btnReady = document.getElementById('btn-toggle-ready');
+  const timerSettingGroup = document.getElementById('timer-setting-group');
+
+  if (isHost) {
+    btnReady.style.display = 'none';
+    if (timerSettingGroup) timerSettingGroup.style.display = 'flex';
+    return;
+  }
+
+  btnReady.style.display = 'inline-flex';
+  if (timerSettingGroup) timerSettingGroup.style.display = 'none';
+  setReadyButtonState(btnReady, !!(myPlayerData && myPlayerData.ready));
+}
+
+function updateHostStartButton(allReady, allConnected) {
+  const btnStart = document.getElementById('btn-start-game-server');
+  btnStart.style.display = 'inline-flex';
+  btnStart.disabled = !(allReady && allConnected);
+  btnStart.innerHTML = iconHtml('rocket') + ' BẮT ĐẦU GAME';
+
+  const isReady = allReady && allConnected;
+  btnStart.style.opacity = isReady ? '1' : '0.9';
+  btnStart.style.background = isReady ? 'var(--matchbox-green)' : '';
+  btnStart.style.borderColor = isReady ? 'var(--matchbox-green)' : '';
+  btnStart.style.color = isReady ? '#000' : '';
+}
+
+function updateNonHostStatus() {
+  document.getElementById('btn-start-game-server').style.display = 'none';
 }
 
 function updateLobbyUI(state) {
-  let myPlayerIndex = state.players.findIndex(p => p.socketId === socket.id);
-  let myPlayerData = myPlayerIndex >= 0 && myPlayerIndex < state.players.length ? state.players[myPlayerIndex] : null;
+  if (!state || state.isGameStarted) return;
+
+  const localPlayerIndex = findMyPlayerIndex(state);
+  const myPlayerData = localPlayerIndex >= 0 ? state.players[localPlayerIndex] : null;
+  const isHost = myPlayerData?.id === state.hostPlayerId;
 
   document.getElementById('current-room-code-text').textContent = state.roomCode;
 
-  for (let i = 0; i < 8; i++) {
-    let nameEl = document.getElementById(`lobby-p${i+1}-name`);
-    let readyEl = document.getElementById(`lobby-p${i+1}-ready`);
-    let cardEl = document.getElementById(`card-p${i+1}-slot`);
-    
-    if (!nameEl || !readyEl) continue;
-
-    if (i < state.players.length) {
-      if (cardEl) cardEl.style.display = 'flex';
-      let p = state.players[i];
-      nameEl.textContent = '👤 ' + p.name;
-
-      if (i === 0) {
-        readyEl.style.display = 'none';
-      } else {
-        readyEl.style.display = 'inline-block';
-        if (p.ready) {
-          readyEl.className = 'ready-tag is-ready';
-          readyEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-        } else {
-          readyEl.className = 'ready-tag not-ready';
-          readyEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 15 15"></polyline></svg>';
-        }
-      }
-    } else {
-      if (cardEl) cardEl.style.display = 'none';
-      nameEl.textContent = `👤 Chờ P${i+1} vào...`;
-      readyEl.className = 'ready-tag not-ready';
-      readyEl.textContent = '—';
-    }
+  if (isHost && state.turnTimeLimit) {
+    const timerSelect = document.getElementById('timer-select');
+    if (timerSelect) timerSelect.value = state.turnTimeLimit;
   }
 
-  let btnStart = document.getElementById('btn-start-game-server');
-  let btnReady = document.getElementById('btn-toggle-ready');
-  
-  let timerSettingGroup = document.getElementById('timer-setting-group');
-  if (myPlayerIndex === 0) {
-    btnReady.style.display = 'none';
-    if (timerSettingGroup) timerSettingGroup.style.display = 'flex';
+  renderLobbySlots(state);
+  updateHostControls(isHost, myPlayerData);
+
+  const nonHostPlayers = state.players.filter((player) => player.id !== state.hostPlayerId);
+  const allReady = nonHostPlayers.every((player) => player.ready);
+  const allConnected = state.players.every((p) => p.connected && !p.abandoned);
+
+  if (isHost) {
+    updateHostStartButton(allReady, allConnected);
   } else {
-    btnReady.style.display = 'inline-flex';
-    if (timerSettingGroup) timerSettingGroup.style.display = 'none';
-    if (myPlayerData && myPlayerData.ready) {
-      btnReady.textContent = '❌ HỦY SẴN SÀNG';
-      btnReady.className = 'btn';
-      btnReady.style.background = 'var(--matchbox-red)';
-      btnReady.style.color = '#fff';
-      btnReady.style.borderColor = 'var(--matchbox-red)';
-    } else {
-      btnReady.textContent = '⚡ SẴN SÀNG';
-      btnReady.className = 'btn btn-green';
-      btnReady.style.background = '';
-      btnReady.style.color = '';
-      btnReady.style.borderColor = '';
-    }
+    updateNonHostStatus();
   }
-
-  let nonHostPlayers = state.players.filter((p, idx) => idx !== 0);
-  let allReady = state.players.length >= 2 && nonHostPlayers.every(p => p.ready);
-  let allConnected = state.players.every(p => p.connected);
-
-  if (myPlayerIndex === 0) {
-    btnStart.style.display = "inline-flex";
-    if (allReady && allConnected) {
-      btnStart.disabled = false;
-      btnStart.style.opacity = "1";
-      btnStart.textContent = "🚀 BẮT ĐẦU GAME (HOST)";
-      showToast("✨ Tất cả đã sẵn sàng!<br>Host bấm nút bên dưới để Bắt Đầu!");
-    } else {
-      btnStart.disabled = false;
-      btnStart.style.opacity = "0.9";
-      btnStart.textContent = "🚀 BẮT ĐẦU GAME";
-      if (state.players.length < 2) {
-        showToast("⏳ Đang chờ người chơi khác tham gia phòng...<br>📋 Chia sẻ mã phòng để mời bạn bè!");
-      } else {
-        let notReady = nonHostPlayers.filter(p => !p.ready).map(p => p.name);
-        if (notReady.length > 0) {
-          showToast("💡 Chờ sẵn sàng: <strong>" + notReady.join(', ') + "</strong>");
-        }
-      }
-    }
-  } else {
-    btnStart.style.display = "none";
-    if (allReady) {
-      showToast("✨ Tất cả đã sẵn sàng!<br>Đang chờ Host bấm Bắt đầu...");
-    } else if (myPlayerData && myPlayerData.ready) {
-      showToast("✅ Bạn đã sẵn sàng! Đang chờ người chơi khác...");
-    } else {
-      showToast("💡 Nhấn <strong>⚡ SẴN SÀNG</strong> khi bạn đã chuẩn bị xong!");
-    }
-  }
+  refreshIcons();
 }

@@ -1,17 +1,19 @@
-const { TOTAL_SLOTS, VERTICAL_SLOTS } = require('../config/constants');
-const { calculateScoreIncremental } = require('../core/gameLogic');
+import { TOTAL_SLOTS, VERTICAL_SLOTS, ROOM_STATUS } from '../config/constants.js';
+import { calculateScoreIncremental } from '../core/gameLogic.js';
+import { saveRoom } from '../services/roomService.js';
 
-const rooms = {};
+const rooms = new Map();
 
-/**
- * Build lightweight player info (no board/matchedLines) for "other" players.
- */
-function getLightweightPlayers(room) {
-  return room.players.map(p => ({
-    socketId: p.socketId,
+const roomRuntimes = new Map();
+const TURN_TRANSITION_DELAY_MS = 500;
+
+function getPublicPlayers(room) {
+  return room.players.map((p) => ({
+    id: p.id,
     name: p.name,
+    seatIndex: p.seatIndex,
     ready: p.ready,
-    connected: !!p.socketId,
+    connected: p.connected,
     score: p.score,
     hasPlacedThisRound: p.hasPlacedThisRound,
     board: p.board,
@@ -19,160 +21,290 @@ function getLightweightPlayers(room) {
   }));
 }
 
-/**
- * Build the shared (non-player-specific) state fields.
- */
 function getBaseState(room) {
+  const hasCurrentPiece =
+    room.status === ROOM_STATUS.PLAYING &&
+    room.turn >= 0 &&
+    room.turn < room.sharedPieceDeck.length;
+
   return {
     roomCode: room.roomCode,
+    status: room.status,
+    hostPlayerId: room.hostPlayerId,
     turn: room.turn,
-    currentPiece: room.turn < room.sharedPieceDeck.length ? room.sharedPieceDeck[room.turn] : [7, 8, 9],
-    timeLeft: room.timeLeft,
+    currentPiece: hasCurrentPiece ? room.sharedPieceDeck[room.turn] : null,
+    timeLeft: calculateTimeLeft(room),
     turnTimeLimit: room.turnTimeLimit,
-    isGameStarted: room.isGameStarted,
-    isGameOver: room.isGameOver
+    stateVersion: room.stateVersion
   };
 }
 
-/**
- * Send personalized state to each player.
- * Each player receives their OWN board + matchedLines,
- * but only lightweight info (name, score, status) for other players.
- * This cuts payload by ~87% for 8-player games.
- */
-function emitRoomState(io, room) {
-  let basePlayers = getLightweightPlayers(room);
-  let baseState = getBaseState(room);
-
-  room.players.forEach((p, idx) => {
-    if (!p.socketId) return;
-
-    // Clone basePlayers and inject this player's own board + matchedLines
-    let personalPlayers = basePlayers.map((bp, i) => {
-      if (i === idx) {
-        return { ...bp, board: p.board, matchedLines: p.matchedLines };
-      }
-      return bp;
-    });
-
-    io.to(p.socketId).emit('room_state_update', {
-      ...baseState,
-      players: personalPlayers
-    });
-  });
-}
-
-/**
- * Full state for a specific player (used for single-socket events like join).
- */
-function getStateForPlayer(room, playerIdx) {
-  let basePlayers = getLightweightPlayers(room);
-  let baseState = getBaseState(room);
-
-  let personalPlayers = basePlayers.map((bp, i) => {
-    if (i === playerIdx) {
-      let p = room.players[i];
-      return { ...bp, board: p.board, matchedLines: p.matchedLines };
-    }
-    return bp;
-  });
-
-  return { ...baseState, players: personalPlayers };
-}
-
-function startServerTurnTimer(io, roomCode) {
-  const room = rooms[roomCode];
-  if (!room) return;
-
-  if (room.timerInterval) {
-    clearInterval(room.timerInterval);
+function calculateTimeLeft(room) {
+  if (room.status === ROOM_STATUS.PAUSED) {
+    return (room.remainingTurnMs || 0) / 1000;
   }
+  if (room.status !== ROOM_STATUS.PLAYING) return 0;
+  if (room.turnEndsAt) {
+    return Math.max(0, (room.turnEndsAt - Date.now()) / 1000);
+  }
+  return 0;
+}
 
-  room.timeLeft = room.turnTimeLimit;
-  room.turnStartedAt = Date.now();
+export function buildRoomStatePayload(room) {
+  return {
+    ...getBaseState(room),
+    players: getPublicPlayers(room)
+  };
+}
 
-  // Reset hasPlacedThisRound for all players
-  room.players.forEach(p => {
+function emitRoomState(io, room) {
+  io.to(room.roomCode).emit('room_state_update', buildRoomStatePayload(room));
+}
+
+function resetTurnPlacementState(room) {
+  room.players.forEach((p) => {
     p.hasPlacedThisRound = false;
   });
+  getOrCreateRuntime(room.roomCode).preferredSlots.clear();
+}
 
+function getOrCreateRuntime(roomCode) {
+  let runtime = roomRuntimes.get(roomCode);
+  if (!runtime) {
+    runtime = {
+      timerInterval: null,
+      transitionTimeout: null,
+      isTransitioning: false,
+      preferredSlots: new Map()
+    };
+    roomRuntimes.set(roomCode, runtime);
+  }
+  return runtime;
+}
+
+function stopTurnInterval(roomCode) {
+  const runtime = roomRuntimes.get(roomCode);
+  if (runtime && runtime.timerInterval) {
+    clearInterval(runtime.timerInterval);
+    runtime.timerInterval = null;
+  }
+}
+
+function stopTimer(roomCode) {
+  const runtime = roomRuntimes.get(roomCode);
+  stopTurnInterval(roomCode);
+  if (runtime && runtime.transitionTimeout) {
+    clearTimeout(runtime.transitionTimeout);
+    runtime.transitionTimeout = null;
+  }
+  if (runtime) runtime.isTransitioning = false;
+}
+
+export async function pauseRoom(io, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  if (room.status === ROOM_STATUS.PAUSED) {
+    stopTimer(roomCode);
+    emitRoomState(io, room);
+    return;
+  }
+  if (room.status !== ROOM_STATUS.PLAYING) return;
+
+  stopTimer(roomCode);
+  room.remainingTurnMs = Math.max(0, (room.turnEndsAt || 0) - Date.now());
+  room.turnEndsAt = null;
+  room.status = ROOM_STATUS.PAUSED;
+  room.stateVersion++;
+
+  await saveRoom(room);
+  emitRoomState(io, room);
+}
+
+export async function resumeRoomTimer(io, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || room.status !== ROOM_STATUS.PAUSED) return;
+
+  const remaining = Math.max(500, room.remainingTurnMs || room.turnTimeLimit * 1000);
+  room.turnEndsAt = Date.now() + remaining;
+  room.remainingTurnMs = null;
+  room.status = ROOM_STATUS.PLAYING;
+  room.stateVersion++;
+
+  await saveRoom(room);
   emitRoomState(io, room);
 
-  room.timerInterval = setInterval(() => {
-    let elapsed = (Date.now() - room.turnStartedAt) / 1000;
-    room.timeLeft = Math.max(0, room.turnTimeLimit - elapsed);
-
-    if (room.timeLeft <= 0) {
-      room.timeLeft = 0;
-      clearInterval(room.timerInterval);
-      room.timerInterval = null;
-      advanceNextTurnServer(io, roomCode);
-    } else {
-      io.to(roomCode).emit('timer_tick', { timeLeft: room.timeLeft });
-    }
-  }, 100);
+  const runtime = getOrCreateRuntime(roomCode);
+  runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
 }
 
-function advanceNextTurnServer(io, roomCode) {
-  const room = rooms[roomCode];
+export async function startServerTurnTimer(io, roomCode) {
+  const room = rooms.get(roomCode);
   if (!room) return;
 
-  let pieceValues = room.sharedPieceDeck[room.turn];
+  stopTimer(roomCode);
 
-  // Auto place for all players who haven't placed this round
-  room.players.forEach(player => {
+  room.turnEndsAt = Date.now() + room.turnTimeLimit * 1000;
+  room.remainingTurnMs = null;
+  room.status = ROOM_STATUS.PLAYING;
+  room.stateVersion++;
+
+  resetTurnPlacementState(room);
+  await saveRoom(room);
+  emitRoomState(io, room);
+
+  const runtime = getOrCreateRuntime(roomCode);
+  runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
+}
+
+async function tickTurnTimer(io, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) {
+    stopTimer(roomCode);
+    return;
+  }
+
+  const timeLeft = calculateTimeLeft(room);
+
+  if (timeLeft <= 0) {
+    await finishCurrentTurn(io, roomCode);
+  } else {
+    io.to(roomCode).emit('timer_tick', { timeLeft });
+  }
+}
+
+function findAvailableSlotIndices(player) {
+  const indices = [];
+  for (let i = 0; i < VERTICAL_SLOTS.length; i++) {
+    const coords = VERTICAL_SLOTS[i];
+    const isEmpty = coords.every((c) => player.board[c.r][c.c] === null);
+    if (isEmpty) indices.push(i);
+  }
+  return indices;
+}
+
+function autoPlaceForPlayer(player, pieceValues, preferredSlotIdx) {
+  const availableIndices = findAvailableSlotIndices(player);
+  if (availableIndices.length === 0) return;
+
+  const slotIdx = availableIndices.includes(preferredSlotIdx)
+    ? preferredSlotIdx
+    : availableIndices[Math.floor(Math.random() * availableIndices.length)];
+  const coords = VERTICAL_SLOTS[slotIdx];
+  coords.forEach((coord, idx) => {
+    player.board[coord.r][coord.c] = pieceValues[idx];
+  });
+
+  const { totalScore, matchLines } = calculateScoreIncremental(
+    player.board,
+    coords,
+    player.matchedLines
+  );
+  player.score = totalScore;
+  player.matchedLines = matchLines;
+}
+
+function autoPlaceMissingMoves(room) {
+  const pieceValues = room.sharedPieceDeck[room.turn];
+  if (!pieceValues) return;
+  const preferredSlots = getOrCreateRuntime(room.roomCode).preferredSlots;
+  room.players.forEach((player) => {
     if (!player.hasPlacedThisRound) {
-      let availableIndices = [];
-      for (let i = 0; i < 27; i++) {
-        let coords = VERTICAL_SLOTS[i];
-        let isEmpty = coords.every(c => player.board[c.r][c.c] === null);
-        if (isEmpty) availableIndices.push(i);
-      }
-      if (availableIndices.length > 0) {
-        let randomIdx = availableIndices[Math.floor(Math.random() * availableIndices.length)];
-        let coords = VERTICAL_SLOTS[randomIdx];
-        coords.forEach((coord, idx) => {
-          player.board[coord.r][coord.c] = pieceValues[idx];
-        });
-        let res = calculateScoreIncremental(player.board, coords, player.matchedLines);
-        player.score = res.totalScore;
-        player.matchedLines = res.matchLines;
-      }
+      autoPlaceForPlayer(player, pieceValues, preferredSlots.get(player.id));
+      player.hasPlacedThisRound = true;
     }
   });
+  preferredSlots.clear();
+}
 
-  // Reset for next turn
-  room.players.forEach(p => {
-    p.hasPlacedThisRound = false;
-  });
+async function endGame(io, roomCode, room) {
+  stopTimer(roomCode);
+  room.status = ROOM_STATUS.FINISHED;
+  room.turnEndsAt = null;
+  room.remainingTurnMs = null;
+  room.stateVersion++;
+  await saveRoom(room);
+
+  emitRoomState(io, room);
+  io.to(roomCode).emit('game_over', buildRoomStatePayload(room));
+
+  rooms.delete(roomCode);
+  roomRuntimes.delete(roomCode);
+}
+
+async function advanceNextTurnServer(io, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  resetTurnPlacementState(room);
   room.turn++;
 
   if (room.turn < TOTAL_SLOTS) {
-    startServerTurnTimer(io, roomCode);
+    await startServerTurnTimer(io, roomCode);
   } else {
-    room.isGameOver = true;
-    // Game over: send personalized final state
-    emitRoomState(io, room);
-    io.to(roomCode).emit('game_over', { ...getBaseState(room), players: getLightweightPlayers(room) });
-    
-    // Explicitly release memory after match to prevent lag
-    setTimeout(() => {
-      if (rooms[roomCode] && rooms[roomCode].isGameOver) {
-        console.log(`🧹 Releasing memory for Room [${roomCode}] after match...`);
-        rooms[roomCode].sharedPieceDeck = [];
-        rooms[roomCode].players.forEach(p => {
-          p.board = [];
-          p.matchedLines = [];
-        });
-      }
-    }, 10000); // 10s delay so players can see the final board before cleanup
+    await endGame(io, roomCode, room);
   }
 }
 
-module.exports = {
-  rooms,
-  emitRoomState,
-  getStateForPlayer,
-  startServerTurnTimer,
-  advanceNextTurnServer
-};
+export async function finishCurrentTurn(io, roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || room.status !== ROOM_STATUS.PLAYING) return;
+
+  const runtime = getOrCreateRuntime(roomCode);
+  if (runtime.isTransitioning) return;
+
+  runtime.isTransitioning = true;
+  stopTurnInterval(roomCode);
+  try {
+    autoPlaceMissingMoves(room);
+    room.turnEndsAt = null;
+    room.stateVersion++;
+    await saveRoom(room);
+    emitRoomState(io, room);
+
+    runtime.transitionTimeout = setTimeout(() => {
+      runtime.transitionTimeout = null;
+      runtime.isTransitioning = false;
+      void advanceNextTurnServer(io, roomCode).catch(console.error);
+    }, TURN_TRANSITION_DELAY_MS);
+  } catch (error) {
+    runtime.isTransitioning = false;
+    throw error;
+  }
+}
+
+export function loadRoomToMemory(room) {
+  rooms.set(room.roomCode, room);
+  if (!roomRuntimes.has(room.roomCode)) {
+    roomRuntimes.set(room.roomCode, {
+      timerInterval: null,
+      transitionTimeout: null,
+      isTransitioning: false,
+      preferredSlots: new Map()
+    });
+  }
+}
+
+export function removeRoomFromMemory(roomCode) {
+  stopTimer(roomCode);
+  rooms.delete(roomCode);
+  roomRuntimes.delete(roomCode);
+}
+
+export function getRoomFromMemory(roomCode) {
+  return rooms.get(roomCode);
+}
+
+export function setAutoPlacePreference(roomCode, playerId, slotIdx) {
+  const runtime = roomRuntimes.get(roomCode);
+  if (!runtime) return;
+
+  const preferredSlots = runtime.preferredSlots;
+  if (slotIdx === null) {
+    preferredSlots.delete(playerId);
+  } else {
+    preferredSlots.set(playerId, slotIdx);
+  }
+}
+
+export { emitRoomState };

@@ -1,4 +1,10 @@
-const { TOTAL_SLOTS, NUM_MIN, NUM_MAX, TURN_TIME_LIMIT } = require('../config/constants');
+import {
+  TOTAL_SLOTS,
+  NUM_MIN,
+  NUM_MAX,
+  TURN_TIME_LIMIT,
+  ROOM_STATUS
+} from '../config/constants.js';
 
 const MAX_PLAYERS = 8;
 
@@ -7,210 +13,152 @@ function randomNum() {
 }
 
 function generateFairPieceDeck() {
-  let deck = [];
+  const deck = [];
   for (let i = 0; i < TOTAL_SLOTS; i++) {
     deck.push([randomNum(), randomNum(), randomNum()]);
   }
   return deck;
 }
 
-function createPlayerState(socketId, name) {
+function createEmptyBoard() {
+  return Array(9)
+    .fill(null)
+    .map(() => Array(9).fill(null));
+}
+
+function createPlayerState(id, socketId, name, seatIndex) {
   return {
-    socketId: socketId,
-    name: name || 'Player',
+    id,
+    socketId,
+    name,
+    seatIndex,
+    connected: true,
     ready: false,
-    board: Array(9).fill(null).map(() => Array(9).fill(null)),
+    board: createEmptyBoard(),
     score: 0,
     hasPlacedThisRound: false,
-    matchedLines: []
+    matchedLines: [],
+    joinedAt: Date.now(),
+    disconnectedAt: null
   };
 }
 
-function createNewRoomState(roomCode) {
+function createNewRoomState(roomCode, hostPlayerId) {
+  const now = Date.now();
   return {
-    roomCode: roomCode,
+    schemaVersion: 1,
+    roomCode,
+    status: ROOM_STATUS.LOBBY,
+    hostPlayerId,
     players: [],
     sharedPieceDeck: generateFairPieceDeck(),
     turn: 0,
-    timeLeft: TURN_TIME_LIMIT,
     turnTimeLimit: TURN_TIME_LIMIT,
-    timerInterval: null,
-    isGameStarted: false,
-    isGameOver: false
+    turnEndsAt: null,
+    remainingTurnMs: null,
+    createdAt: now,
+    updatedAt: now,
+    stateVersion: 1
   };
 }
 
-// --- Incremental Scoring ---
-// Instead of scanning all 52 lines every move, only re-scan
-// the ~10 lines (rows/cols/diagonals) that intersect the placed cells.
-
-function getAffectedLineIds(coords) {
-  let ids = new Set();
+function buildAffectedLineIds(coords) {
+  const ids = new Set();
   coords.forEach(({ r, c }) => {
     ids.add(`row-${r}`);
     ids.add(`col-${c}`);
-    ids.add(`diagA-${r + c}`);       // k = r + c (anti-diagonal sweep)
-    ids.add(`diagB-${r - c + 8}`);   // k = r - c + 8 (main diagonal sweep)
+    ids.add(`diagA-${r + c}`);
+    ids.add(`diagB-${r - c + 8}`);
   });
   return ids;
 }
 
-function scanRow(board, r) {
-  let matches = [];
-  let matchLen = 1;
-  for (let c = 0; c < 9; c++) {
-    if (c < 8 && board[r][c] !== null && board[r][c] === board[r][c + 1]) {
-      matchLen++;
-    } else {
-      if (matchLen >= 3) {
-        let val = board[r][c];
-        let startC = c - matchLen + 1;
-        matches.push({
-          lineId: `row-${r}`,
-          name: `Hàng ${r + 1}`,
-          val, len: matchLen, points: val * matchLen,
-          start: { r, c: startC },
-          end: { r, c }
-        });
-      }
-      matchLen = 1;
+function findRuns(line, lineId, nameForLength) {
+  const matches = [];
+  if (line.length < 3) return matches;
+
+  let runLength = 1;
+  for (let i = 0; i < line.length; i++) {
+    const continuesRun =
+      i < line.length - 1 && line[i].val !== null && line[i].val === line[i + 1].val;
+    if (continuesRun) {
+      runLength++;
+      continue;
     }
+    if (runLength >= 3) {
+      const val = line[i].val;
+      const startCell = line[i - runLength + 1];
+      const endCell = line[i];
+      matches.push({
+        lineId,
+        name: nameForLength(runLength),
+        val,
+        len: runLength,
+        points: val * runLength,
+        start: { r: startCell.r, c: startCell.c },
+        end: { r: endCell.r, c: endCell.c }
+      });
+    }
+    runLength = 1;
   }
   return matches;
+}
+
+function scanRow(board, r) {
+  const line = [];
+  for (let c = 0; c < 9; c++) line.push({ r, c, val: board[r][c] });
+  return findRuns(line, `row-${r}`, () => `Hàng ${r + 1}`);
 }
 
 function scanCol(board, c) {
-  let matches = [];
-  let matchLen = 1;
-  for (let r = 0; r < 9; r++) {
-    if (r < 8 && board[r][c] !== null && board[r][c] === board[r + 1][c]) {
-      matchLen++;
-    } else {
-      if (matchLen >= 3) {
-        let val = board[r][c];
-        let startR = r - matchLen + 1;
-        matches.push({
-          lineId: `col-${c}`,
-          name: `Cột ${c + 1}`,
-          val, len: matchLen, points: val * matchLen,
-          start: { r: startR, c },
-          end: { r, c }
-        });
-      }
-      matchLen = 1;
-    }
-  }
-  return matches;
+  const line = [];
+  for (let r = 0; r < 9; r++) line.push({ r, c, val: board[r][c] });
+  return findRuns(line, `col-${c}`, () => `Cột ${c + 1}`);
 }
 
 function scanDiagA(board, k) {
-  // k = r + c (labeled "Chéo \\" in game UI)
-  let line = [];
+  const line = [];
   for (let r = 0; r < 9; r++) {
-    let c = k - r;
-    if (c >= 0 && c < 9) {
-      line.push({ r, c, val: board[r][c] });
-    }
+    const c = k - r;
+    if (c >= 0 && c < 9) line.push({ r, c, val: board[r][c] });
   }
-  return scanDiagLine(line, `diagA-${k}`, '\\');
+  return findRuns(line, `diagA-${k}`, (len) => `Chéo \\ (${len} ô)`);
 }
 
 function scanDiagB(board, k) {
-  // k = r - c + 8 (labeled "Chéo /" in game UI)
-  let line = [];
+  const line = [];
   for (let r = 0; r < 9; r++) {
-    let c = r - k + 8;
-    if (c >= 0 && c < 9) {
-      line.push({ r, c, val: board[r][c] });
-    }
+    const c = r - k + 8;
+    if (c >= 0 && c < 9) line.push({ r, c, val: board[r][c] });
   }
-  return scanDiagLine(line, `diagB-${k}`, '/');
+  return findRuns(line, `diagB-${k}`, (len) => `Chéo / (${len} ô)`);
 }
 
-function scanDiagLine(line, lineId, symbol) {
-  let matches = [];
-  if (line.length < 3) return matches;
-
-  let matchLen = 1;
-  for (let i = 0; i < line.length; i++) {
-    if (i < line.length - 1 && line[i].val !== null && line[i].val === line[i + 1].val) {
-      matchLen++;
-    } else {
-      if (matchLen >= 3) {
-        let val = line[i].val;
-        let startCell = line[i - matchLen + 1];
-        let endCell = line[i];
-        matches.push({
-          lineId,
-          name: `Chéo ${symbol} (${matchLen} ô)`,
-          val, len: matchLen, points: val * matchLen,
-          start: { r: startCell.r, c: startCell.c },
-          end: { r: endCell.r, c: endCell.c }
-        });
-      }
-      matchLen = 1;
-    }
-  }
-  return matches;
+function scanLineById(board, lineId) {
+  const [type, indexStr] = lineId.split('-');
+  const index = parseInt(indexStr, 10);
+  if (type === 'row') return scanRow(board, index);
+  if (type === 'col') return scanCol(board, index);
+  if (type === 'diagA') return scanDiagA(board, index);
+  return scanDiagB(board, index);
 }
 
-/**
- * Incremental scoring: only re-scan lines affected by the newly placed coords.
- * @param {Array} board - 9x9 board
- * @param {Array} placedCoords - array of {r, c} for the cells just placed
- * @param {Array} existingMatchLines - previous matchLines from player state
- * @returns {{ totalScore: number, matchLines: Array }}
- */
 function calculateScoreIncremental(board, placedCoords, existingMatchLines) {
-  let affectedIds = getAffectedLineIds(placedCoords);
+  const affectedIds = buildAffectedLineIds(placedCoords);
+  const keptLines = (existingMatchLines || []).filter((ml) => !affectedIds.has(ml.lineId));
+  const rescannedLines = [...affectedIds].flatMap((id) => scanLineById(board, id));
 
-  // Keep match lines from unaffected rows/cols/diags
-  let keptLines = (existingMatchLines || []).filter(ml => !affectedIds.has(ml.lineId));
-
-  // Re-scan only affected lines
-  let newLines = [];
-  affectedIds.forEach(id => {
-    let parts = id.split('-');
-    let type = parts[0];
-    let idx = parseInt(parts[1]);
-
-    if (type === 'row') {
-      newLines.push(...scanRow(board, idx));
-    } else if (type === 'col') {
-      newLines.push(...scanCol(board, idx));
-    } else if (type === 'diagA') {
-      newLines.push(...scanDiagA(board, idx));
-    } else if (type === 'diagB') {
-      newLines.push(...scanDiagB(board, idx));
-    }
-  });
-
-  let allLines = [...keptLines, ...newLines];
-  let totalScore = allLines.reduce((sum, ml) => sum + ml.points, 0);
+  const allLines = [...keptLines, ...rescannedLines];
+  const totalScore = allLines.reduce((sum, ml) => sum + ml.points, 0);
 
   return { totalScore, matchLines: allLines };
 }
 
-/**
- * Full board scan (kept as fallback/verification).
- */
-function calculateScoreForBoard(board) {
-  let matchLines = [];
-  for (let r = 0; r < 9; r++) matchLines.push(...scanRow(board, r));
-  for (let c = 0; c < 9; c++) matchLines.push(...scanCol(board, c));
-  for (let k = 0; k < 17; k++) matchLines.push(...scanDiagA(board, k));
-  for (let k = 0; k < 17; k++) matchLines.push(...scanDiagB(board, k));
-
-  let totalScore = matchLines.reduce((sum, ml) => sum + ml.points, 0);
-  return { totalScore, matchLines };
-}
-
-module.exports = {
+export {
   MAX_PLAYERS,
-  randomNum,
   generateFairPieceDeck,
   createNewRoomState,
   createPlayerState,
-  calculateScoreForBoard,
+  createEmptyBoard,
   calculateScoreIncremental
 };

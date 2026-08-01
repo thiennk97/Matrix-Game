@@ -1,227 +1,266 @@
 <!DOCTYPE html>
 <html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Matrix Battle - Realtime Server Engine</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Orbitron:wght@600;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Matrix Battle - Realtime Server Engine</title>
+    <script src="/js/bootstrap.js?v=1"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Orbitron:wght@600;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="/css/style.css?v=90" />
+  </head>
+  <body>
+    <header>
+      <div class="logo" id="header-logo" style="cursor: pointer">
+        <svg
+          width="300"
+          height="40"
+          viewBox="0 0 300 40"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          class="logo-svg"
+        >
+          <g transform="translate(0, 5)">
+            <rect x="0" y="0" width="8" height="8" rx="2" fill="#FF9F1C" />
+            <rect x="11" y="0" width="8" height="8" rx="2" fill="#FFBF69" />
+            <rect x="22" y="0" width="8" height="8" rx="2" fill="#FF9F1C" />
+            <rect x="0" y="11" width="8" height="8" rx="2" fill="#FFBF69" />
+            <rect x="11" y="11" width="8" height="8" rx="2" fill="#FF9F1C" />
+            <rect x="22" y="11" width="8" height="8" rx="2" fill="#FFBF69" />
+            <rect x="0" y="22" width="8" height="8" rx="2" fill="#FF9F1C" />
+            <rect x="11" y="22" width="8" height="8" rx="2" fill="#FFBF69" />
+            <rect x="22" y="22" width="8" height="8" rx="2" fill="#FF9F1C" />
+          </g>
+          <text
+            x="45"
+            y="27"
+            font-family="'Orbitron', sans-serif"
+            font-weight="900"
+            font-size="24"
+            fill="url(#logoGrad)"
+            letter-spacing="2"
+          >
+            MATRIX
+          </text>
+          <text
+            x="160"
+            y="27"
+            font-family="'Orbitron', sans-serif"
+            font-weight="900"
+            font-size="24"
+            fill="#FFFFFF"
+            letter-spacing="1"
+          >
+            PONOS
+          </text>
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#FF9F1C" />
+              <stop offset="100%" stop-color="#FFBF69" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </header>
 
-  <!-- Socket.io Client -->
-  <script src="/socket.io/socket.io.js"></script>
+    <div id="view-index" class="app-view">
+      <div class="index-header">
+        <h2>Phòng Đang Chờ</h2>
+        <button class="btn btn-primary" id="btn-show-create-room">
+          <i data-lucide="plus" class="icon"></i> TẠO PHÒNG MỚI
+        </button>
+      </div>
 
-  <link rel="stylesheet" href="/css/style.css?v=30">
-</head>
-<body>
-
-  <header>
-    <div class="logo">
-      <div class="logo-badge">MATRIX PONOS</div>
+      <div id="public-rooms-container" class="public-rooms-grid"></div>
     </div>
-    <div style="font-size: 0.85rem; color: #a8a29e;">
-    </div>
-  </header>
 
-  <div class="main-layout">
-    <div class="game-area">
-      <!-- Status bar: dynamic players + turn -->
-      <div class="status-bar">
-        <div class="status-players-row" id="status-players-row">
-          <!-- Dynamically filled by JS -->
+    <div id="view-game" class="app-view" style="display: none">
+      <div class="room-session-actions">
+        <button class="btn btn-sm btn-primary" id="btn-restart-game" style="display: none">
+          <i data-lucide="rotate-ccw" class="icon"></i> Đấu ván mới
+        </button>
+        <button class="btn btn-sm btn-muted" id="btn-leave-room">
+          <i data-lucide="log-out" class="icon"></i> Thoát phòng
+        </button>
+      </div>
+      <div class="main-layout">
+        <aside class="panel-section leaderboard-panel" id="leaderboard-panel">
+          <div class="panel-title">
+            <span><i data-lucide="trophy" class="icon"></i> Bảng Xếp Hạng</span>
+          </div>
+          <div class="match-list" id="match-list-details">
+            <div class="match-list-empty">Đang tải...</div>
+          </div>
+        </aside>
+
+        <div class="game-area">
+          <div class="panel-section board-card">
+            <div class="board-main">
+              <div id="game-pause-overlay" class="game-pause-overlay" style="display: none">
+                <h2><i data-lucide="pause-circle" class="icon"></i> TRẬN ĐẤU BỊ TẠM DỪNG</h2>
+                <p>Đang chờ người chơi kết nối lại...</p>
+              </div>
+
+              <div id="room-waiting-overlay" class="room-waiting-overlay" style="display: none">
+                <div class="lobby-room-view">
+                  <div class="lobby-room-header">
+                    <div class="lobby-room-code">
+                      <span>MÃ PHÒNG:</span>
+                      <strong id="current-room-code-text"></strong>
+                      <button
+                        class="btn btn-sm btn-muted"
+                        id="btn-copy-link"
+                        title="Sao chép link mời"
+                        aria-label="Sao chép link mời"
+                      >
+                        <i data-lucide="link" class="icon"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="lobby-players-grid" id="lobby-players-grid"></div>
+
+                  <div class="timer-select-group" id="timer-setting-group">
+                    <label> <i data-lucide="timer" class="icon"></i> THỜI GIAN MỖI LƯỢT: </label>
+                    <select id="timer-select">
+                      <option value="5">5 giây</option>
+                      <option value="8" selected>8 giây</option>
+                      <option value="10">10 giây</option>
+                      <option value="15">15 giây</option>
+                    </select>
+                  </div>
+
+                  <div class="lobby-room-buttons">
+                    <button class="btn btn-green" id="btn-toggle-ready">
+                      <i data-lucide="zap" class="icon"></i> SẴN SÀNG
+                    </button>
+                    <button class="btn btn-primary" id="btn-start-game-server">
+                      <i data-lucide="rocket" class="icon"></i> BẮT ĐẦU GAME
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="board-timer-bar" id="board-timer-bar">
+                <span id="timer-text-val" class="timer-value">8.0s</span>
+                <div class="timer-bar-container">
+                  <div class="timer-bar-fill" id="timer-bar-fill"></div>
+                </div>
+              </div>
+              <div class="board-container" style="display: flex; gap: var(--space-5)">
+                <div class="board-wrapper">
+                  <div id="pixi-board-container" class="pixi-board-container"></div>
+                </div>
+
+                <div class="piece-panel" id="piece-panel">
+                  <div class="current-piece-vertical" id="current-piece-display"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section chat-panel" id="chat-widget">
+          <div class="panel-title chat-header" id="chat-header">
+            <span><i data-lucide="message-circle" class="icon"></i> Chat Nhóm</span>
+            <i data-lucide="chevron-down" class="icon" id="chat-toggle-icon"></i>
+          </div>
+          <div class="chat-body" id="chat-body">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-row">
+              <input
+                type="text"
+                id="chat-input"
+                placeholder="Nhập tin nhắn..."
+                autocomplete="off"
+                maxlength="100"
+              />
+              <button id="btn-send-chat" aria-label="Gửi">
+                <i data-lucide="send" class="icon"></i>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div id="board-and-panel" style="display: flex; gap: 2rem; justify-content: center; align-items: stretch; margin-top: 1rem; background: #fafafa; padding: 2rem; border-radius: 16px;">
-        <div class="board-wrapper" style="padding: 0; background: transparent; border: none; position: relative;">
-          <!-- Name tag -->
-          <div id="pixi-board-container" style="width: 467px; height: 467px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"></div>
+      <div class="panel-section wide-section" id="opponents-section" style="display: none">
+        <div class="panel-title">
+          <span><i data-lucide="eye" class="icon"></i> Bàn Đối Thủ</span>
         </div>
-
-        <div class="piece-panel" style="display: flex; flex-direction: column; justify-content: flex-start; width: 100px; min-width: 100px; flex-shrink: 0; background: transparent; border: none; padding: 0;">
-          <div class="current-piece-vertical" id="current-piece-display" style="background: transparent; border-radius: 0; padding: 0; gap: 0; min-height: 150px;"></div>
-
-          <div class="timer-display-box" style="display: flex; margin-top: 2rem; flex-direction: column; gap: 0.2rem; align-items: center;">
-            <span style="font-size: 0.85rem; color: #64748b; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800;">⏳ THỜI GIAN</span>
-            <span id="timer-text-val" style="color: #1a1a1a; font-size: 1.4rem; font-weight: 900; width: 50px; text-align: center; display: inline-block; font-variant-numeric: tabular-nums;">8.0s</span>
-          </div>
-          <div class="timer-bar-container" style="position: relative; width: 100%; margin-top: 0.5rem; border-radius: 4px; overflow: hidden; background: #e2e8f0;">
-            <div class="timer-bar-fill" id="timer-bar-fill"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="right-panel">
-
-      <!-- Leaderboard -->
-      <div class="panel-section">
-        <div class="panel-title" style="display: flex; justify-content: space-between; align-items: center;">
-          <span>🏆 BẢNG XẾP HẠNG</span>
-          <button class="btn" id="btn-open-lobby-modal" style="padding: 0.3rem 0.6rem; font-size: 0.65rem;">🌐 Phòng Chờ</button>
-        </div>
-        <div class="match-list" id="match-list-details">
-          <div style="font-size: 0.78rem; color: #78716c; text-align: center; padding: 0.5rem;">Đang tải...</div>
-        </div>
-      </div>
-
-      <!-- Opponents mini boards will be moved below -->    </div>
-  </div>
-
-  <!-- BÀN ĐỐI THỦ (MOVED TO BOTTOM) -->
-  <div class="panel-section" id="opponents-section" style="display: none; max-width: 1650px; margin: 0 auto 2rem; width: 100%; padding: 1.2rem 1.5rem;">
-    <div class="panel-title"><span>👁️ BÀN ĐỐI THỦ</span></div>
-    <div class="opponents-boards-container" id="opponents-boards-container"></div>
-  </div>
-
-  <!-- PHÒNG CHỜ THI ĐẤU MULTIPLAYER SERVER -->
-  <div class="lobby-modal-overlay" id="lobby-modal">
-    <div class="lobby-card">
-      <div class="lobby-header">
-        <h2>🔥 MATRIX PONOS BATTLE MULTIPLAYER</h2>
-      </div>
-
-      <!-- BANNER THÔNG BÁO CHUNG REALTIME -->
-      <div class="toast-banner" id="lobby-status-banner">
-        🟢 Hệ thống sẵn sàng!<br>Nhập tên của bạn để tham gia vào trận đấu.
-      </div>
-
-      <!-- VIEW 1: CHƯA VÀO PHÒNG -->
-      <div id="lobby-setup-view" style="display: flex; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.8rem; color: #a8a29e; font-weight: 700;">TÊN CỦA BẠN:</label>
-          <input type="text" id="player-name-input" class="text-input" placeholder="Nhập tên của bạn..." style="font-size: 1rem; text-align: center;">
-        </div>
-        <div style="display: none; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.8rem; color: #a8a29e; font-weight: 700;">MÃ PHÒNG (để trống = GLOBAL):</label>
-          <input type="text" id="room-code-input" class="text-input" placeholder="VD: ABC123" style="font-size: 1rem; text-align: center; text-transform: uppercase;">
-        </div>
-
-        <button class="btn btn-cyan" id="btn-join-room" style="padding: 0.9rem; font-size: 1rem;">🔗 VÀO GAME</button>
-      </div>
-
-      <!-- VIEW 2: ĐÃ VÀO PHÒNG -->
-      <div id="lobby-room-view" style="display: none; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; background: #180b03; border: 1px solid var(--border); border-radius: 12px; padding: 0.6rem 1rem;">
-          <div style="display: none;">
-            <span style="font-size: 0.75rem; color: #a8a29e;">MÃ PHÒNG:</span>
-            <strong style="font-size: 1.1rem; color: var(--matchbox-gold); margin-left: 6px;" id="current-room-code-text">GLOBAL</strong>
-          </div>
-          <div style="display: flex; gap: 6px;">
-            <button class="btn" id="btn-leave-room" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; border-color: rgba(255,255,255,0.2); color: #a8a29e;">🚪 Thoát</button>
-          </div>
-        </div>
-
-        <!-- 4 Player Slots (2x2 grid) -->
-        <div class="lobby-players-grid">
-          <!-- SLOT P1 (HOST) -->
-          <div class="player-slot-card p1-slot" id="card-p1-slot">
-            <div class="slot-player-name" id="lobby-p1-name">👤 Chờ Host...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p1-ready" style="display: none;">—</div>
-          </div>
-
-          <!-- SLOT P2 -->
-          <div class="player-slot-card p2-slot" style="display: none;" id="card-p2-slot">
-            <div class="slot-player-name" id="lobby-p2-name">👤 Chờ P2 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p2-ready">—</div>
-          </div>
-
-          <!-- SLOT P3 -->
-          <div class="player-slot-card p3-slot" style="display: none;" id="card-p3-slot">
-            <div class="slot-player-name" id="lobby-p3-name">👤 Chờ P3 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p3-ready">—</div>
-          </div>
-
-          <!-- SLOT P4 -->
-          <div class="player-slot-card p4-slot" style="display: none;" id="card-p4-slot">
-            <div class="slot-player-name" id="lobby-p4-name">👤 Chờ P4 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p4-ready">—</div>
-          </div>
-
-          <!-- SLOT P5 -->
-          <div class="player-slot-card p5-slot" style="display: none;" id="card-p5-slot">
-            <div class="slot-player-name" id="lobby-p5-name">👤 Chờ P5 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p5-ready">—</div>
-          </div>
-
-          <!-- SLOT P6 -->
-          <div class="player-slot-card p6-slot" style="display: none;" id="card-p6-slot">
-            <div class="slot-player-name" id="lobby-p6-name">👤 Chờ P6 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p6-ready">—</div>
-          </div>
-
-          <!-- SLOT P7 -->
-          <div class="player-slot-card p7-slot" style="display: none;" id="card-p7-slot">
-            <div class="slot-player-name" id="lobby-p7-name">👤 Chờ P7 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p7-ready">—</div>
-          </div>
-
-          <!-- SLOT P8 -->
-          <div class="player-slot-card p8-slot" style="display: none;" id="card-p8-slot">
-            <div class="slot-player-name" id="lobby-p8-name">👤 Chờ P8 vào...</div>
-
-            <div class="ready-tag not-ready" id="lobby-p8-ready">—</div>
-          </div>
-        </div>
-
-        <!-- Timer setting -->
-        <div class="timer-select-group" id="timer-setting-group">
-          <label>⏱ THỜI GIAN MỖI LƯỢT:</label>
-          <select id="timer-select">
-            <option value="5">5 giây</option>
-            <option value="8" selected>8 giây</option>
-            <option value="10">10 giây</option>
-            <option value="15">15 giây</option>
-          </select>
-        </div>
-
-        <div style="display: flex; gap: 10px;">
-          <button class="btn btn-green" id="btn-toggle-ready" style="flex: 1; padding: 0.85rem;">⚡ SẴN SÀNG</button>
-          <button class="btn" id="btn-start-game-server" style="flex: 1.2; background: var(--matchbox-orange); color: #000; padding: 0.85rem; font-size: 0.95rem;">🚀 BẮT ĐẦU GAME</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal Victory -->
-  <div class="modal-overlay" id="victory-modal">
-    <div class="modal-card" style="position: relative;">
-      <button id="btn-close-victory" style="position: absolute; top: 12px; right: 18px; background: none; border: none; font-size: 1.8rem; color: #a8a29e; cursor: pointer; line-height: 1;">&times;</button>
-      <div class="modal-title" id="modal-winner">🏆 MATRIX WINNER!</div>
-      <p style="color: #a8a29e; margin-bottom: 1.5rem; line-height: 1.8; font-size: 0.95rem;" id="modal-scores"></p>
-      <button class="btn" id="btn-modal-restart" style="margin: 0 auto;">🔄 Đấu Ván Mới</button>
-    </div>
-  </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
-  <!-- Chat Widget -->
-  <div class="chat-widget" id="chat-widget">
-    <div class="chat-header" id="chat-header">
-      <span>💬 Chat Nhóm</span>
-      <span id="chat-toggle-icon">▼</span>
-    </div>
-    <div class="chat-body" id="chat-body">
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-row">
-        <input type="text" id="chat-input" placeholder="Nhập tin nhắn..." autocomplete="off" maxlength="100">
-        <button id="btn-send-chat">Gửi</button>
+        <div class="opponents-boards-container" id="opponents-boards-container"></div>
       </div>
     </div>
-  </div>
 
-  <script src="/js/config/constants.js"></script>
-  <script src="/js/ui/pixi-board.js?v=30"></script>
-  <script src="/js/ui/lobby.js?v=30"></script>
-  <script src="/js/ui/hud.js?v=30"></script>
-  <script src="/js/ui/opponents.js?v=30"></script>
-  <script src="/js/core/game.js?v=30"></script>
-  <script src="/js/network/app.js?v=30"></script>
-</body>
+    <div class="modal-overlay" id="name-modal" style="display: none">
+      <div class="modal-card">
+        <button id="btn-close-name-modal" class="modal-close-btn">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+        <div class="modal-title" id="name-modal-title">THAM GIA PHÒNG</div>
+        <p
+          id="name-modal-desc"
+          style="
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-align: center;
+          "
+        ></p>
+        <div class="form-field">
+          <input
+            type="text"
+            id="name-modal-input"
+            class="text-input"
+            placeholder="Nhập tên của bạn..."
+            autocomplete="off"
+            maxlength="24"
+            required
+          />
+        </div>
+        <button class="btn btn-cyan btn-lg" id="btn-name-modal-submit">
+          <i data-lucide="check" class="icon"></i> XÁC NHẬN
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="victory-modal" style="display: none">
+      <div class="modal-card victory-modal-card">
+        <button id="btn-close-victory" class="modal-close-btn">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+        <div class="modal-title" id="modal-winner">
+          <i data-lucide="trophy" class="icon"></i> MATRIX WINNER!
+        </div>
+        <div class="modal-scores" id="modal-scores"></div>
+        <div
+          class="modal-buttons"
+          style="display: flex; gap: 10px; justify-content: center; margin-top: var(--space-4)"
+        >
+          <button class="btn btn-muted" id="btn-modal-leave">
+            <i data-lucide="log-out" class="icon"></i> Thoát Phòng
+          </button>
+          <button class="btn btn-primary" id="btn-modal-restart">
+            <i data-lucide="rotate-ccw" class="icon"></i> Đấu Ván Mới
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="/js/config/constants.js"></script>
+    <script src="/js/config/icons.js"></script>
+    <script src="/js/ui/pixi-board.js?v=79"></script>
+    <script src="/js/ui/lobby.js?v=78"></script>
+    <script src="/js/ui/hud.js?v=77"></script>
+    <script src="/js/ui/opponents.js?v=70"></script>
+    <script src="/js/core/game.js?v=79"></script>
+    <script src="/js/network/app.js?v=79"></script>
+  </body>
 </html>
