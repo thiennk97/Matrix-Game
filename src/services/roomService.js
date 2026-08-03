@@ -146,6 +146,36 @@ export async function leaveRoom(roomCode, playerId) {
   return room;
 }
 
+export async function kickPlayer(roomCode, hostPlayerId, targetPlayerId) {
+  const room = await repo.getRoom(roomCode);
+  if (!room) {
+    return { error: 'ROOM_EXPIRED', message: 'Phòng đã hết hạn.' };
+  }
+  if (room.status !== ROOM_STATUS.LOBBY) {
+    return { error: 'GAME_ALREADY_STARTED', message: 'Không thể kick người chơi khi trận đấu đang diễn ra.' };
+  }
+  if (room.hostPlayerId !== hostPlayerId) {
+    return { error: 'NOT_HOST', message: 'Chỉ chủ phòng mới có thể kick người chơi.' };
+  }
+  if (targetPlayerId === hostPlayerId) {
+    return { error: 'CANNOT_KICK_SELF', message: 'Không thể tự kick bản thân.' };
+  }
+
+  const target = room.players.find((p) => p.id === targetPlayerId);
+  if (!target) {
+    return { error: 'PLAYER_NOT_FOUND', message: 'Không tìm thấy người chơi trong phòng này.' };
+  }
+
+  const kickedSocketId = target.socketId;
+  room.players = room.players.filter((p) => p.id !== targetPlayerId);
+  room.updatedAt = Date.now();
+  room.stateVersion++;
+
+  await repo.saveRoom(room);
+
+  return { room, kickedSocketId };
+}
+
 export async function disconnectPlayer(roomCode, playerId) {
   const room = await repo.getRoom(roomCode);
   if (!room) return null;

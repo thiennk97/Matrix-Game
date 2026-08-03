@@ -857,6 +857,31 @@ header {
   filter: drop-shadow(0 0 8px rgba(255, 51, 102, 0.8));
 }
 
+.btn-kick-player {
+  position: absolute;
+  top: 50%;
+  right: 40px;
+  transform: translateY(-50%);
+  z-index: 2;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.btn-kick-player .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-kick-player:hover {
+  color: var(--matchbox-red);
+}
+
 .timer-select-group {
   display: flex;
   align-items: center;
@@ -869,7 +894,7 @@ header {
 }
 
 .timer-select-group label {
-  font-size: 0.75rem;
+  font-size: 0.95rem;
   color: var(--text-muted);
   font-weight: 700;
   white-space: nowrap;

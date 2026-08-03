@@ -87,7 +87,7 @@ function findMyPlayerIndex(state) {
   return state.players.findIndex((p) => p.id === myPlayerId);
 }
 
-function buildLobbySlotHtml(player, isHostSlot, slotIndex) {
+function buildLobbySlotHtml(player, isHostSlot, slotIndex, canKick) {
   if (!player) {
     return `
       <div class="player-slot-card p${slotIndex + 1}-slot" style="display: none;">
@@ -111,6 +111,9 @@ function buildLobbySlotHtml(player, isHostSlot, slotIndex) {
   const disconnectedTag = !player.connected
     ? `<span class="disconnected-tag" style="color:var(--matchbox-red); font-size:12px; margin-left:8px;">(Mất kết nối)</span>`
     : '';
+  const kickHtml = canKick
+    ? `<button class="btn-kick-player" data-player-id="${player.id}" title="Kick khỏi phòng"><i data-lucide="user-x" class="icon"></i></button>`
+    : '';
 
   return `
     <div class="player-slot-card p${slotIndex + 1}-slot" style="display: flex;">
@@ -120,11 +123,12 @@ function buildLobbySlotHtml(player, isHostSlot, slotIndex) {
         )} ${youTag} ${disconnectedTag}
       </div>
       ${readyHtml}
+      ${kickHtml}
     </div>
   `;
 }
 
-function renderLobbySlots(state) {
+function renderLobbySlots(state, isViewerHost) {
   const grid = document.getElementById('lobby-players-grid');
   if (!grid) return;
 
@@ -132,7 +136,9 @@ function renderLobbySlots(state) {
   let html = '';
   for (let i = 0; i < MAX_LOBBY_SLOTS; i++) {
     const player = playersBySeat.get(i) || null;
-    html += buildLobbySlotHtml(player, player?.id === state.hostPlayerId, i);
+    const isHostSlot = player?.id === state.hostPlayerId;
+    const canKick = isViewerHost && player && !isHostSlot;
+    html += buildLobbySlotHtml(player, isHostSlot, i, canKick);
   }
   grid.innerHTML = html;
   refreshIcons();
@@ -200,7 +206,7 @@ function updateLobbyUI(state) {
     if (timerSelect) timerSelect.value = state.turnTimeLimit;
   }
 
-  renderLobbySlots(state);
+  renderLobbySlots(state, isHost);
   updateHostControls(isHost, myPlayerData);
 
   const nonHostPlayers = state.players.filter((player) => player.id !== state.hostPlayerId);

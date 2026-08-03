@@ -365,6 +365,20 @@ function handleLeaveRoomClick() {
   });
 }
 
+function handleKickPlayerClick(targetPlayerId) {
+  if (!targetPlayerId) return;
+
+  socket.emit('kick_player', { targetPlayerId }, (res) => {
+    if (!res?.ok) alert(res?.error?.message || 'Không thể kick người chơi.');
+  });
+}
+
+function handleKickedFromRoom() {
+  resetClientRoomState();
+  renderAppView(APP_VIEW.INDEX);
+  fetchAndRenderRooms();
+}
+
 function handleCloseVictoryClick() {
   document.getElementById('victory-modal').style.display = 'none';
   if (localRoomState && localRoomState.status === 'LOBBY') {
@@ -470,6 +484,7 @@ function registerSocketListeners() {
   socket.on('game_over', handleGameOver);
   socket.on('chat_message', handleChatMessage);
   socket.on('lobby_rooms_update', handleLobbyRoomsUpdate);
+  socket.on('kicked_from_room', handleKickedFromRoom);
 }
 
 function registerUiListeners() {
@@ -500,6 +515,11 @@ function registerUiListeners() {
   document.getElementById('btn-close-victory').addEventListener('click', handleCloseVictoryClick);
 
   document.getElementById('btn-copy-link').addEventListener('click', handleCopyLinkClick);
+
+  document.getElementById('lobby-players-grid').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-kick-player');
+    if (btn) handleKickPlayerClick(btn.getAttribute('data-player-id'));
+  });
 
   document.getElementById('header-logo').addEventListener('click', () => {
     if (!hasJoinedRoom) {

@@ -254,6 +254,41 @@ export function registerSocketHandlers(io) {
       }
     });
 
+    socket.on('kick_player', async ({ targetPlayerId }, ack) => {
+      try {
+        const session = socketToPlayerMap.get(socket.id);
+        if (!session) {
+          replyError(ack, 'Not in a room', 'NOT_IN_ROOM');
+          return;
+        }
+
+        const result = await roomService.kickPlayer(session.roomCode, session.playerId, targetPlayerId);
+        if (result.error) {
+          reply(ack, { ok: false, error: result });
+          return;
+        }
+
+        const { room, kickedSocketId } = result;
+        loadRoomToMemory(room);
+        setAutoPlacePreference(room.roomCode, targetPlayerId, null);
+
+        if (kickedSocketId) {
+          const kickedSocket = io.sockets.sockets.get(kickedSocketId);
+          if (kickedSocket) {
+            kickedSocket.emit('kicked_from_room');
+            kickedSocket.leave(room.roomCode);
+            socketToPlayerMap.delete(kickedSocketId);
+          }
+        }
+
+        emitRoomState(io, room);
+        reply(ack, { ok: true });
+        await broadcastLobbyRooms(io);
+      } catch (err) {
+        replyError(ack, err.message);
+      }
+    });
+
     socket.on('start_game', async ({ turnTimeLimit }, ack) => {
       try {
         const session = socketToPlayerMap.get(socket.id);
