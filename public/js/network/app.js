@@ -4,10 +4,10 @@ const btnSendChat = document.getElementById('btn-send-chat');
 const chatHeader = document.getElementById('chat-header');
 const chatWidget = document.getElementById('chat-widget');
 
-const CLICK_BLOCK_DURATION_MS = 500;
+const CLICK_BLOCK_DURATION_MS = 200;
 const MEDAL_TIERS = ['gold', 'silver', 'bronze'];
 const MAX_CHAT_HISTORY = 50;
-const VICTORY_MODAL_DELAY_MS = 2000;
+const VICTORY_MODAL_DELAY_MS = 1000;
 
 let currentTurn = -1;
 let victoryModalTimer = null;
@@ -217,8 +217,13 @@ function handleRoomStateUpdate(state) {
   }
 
   const isReconnect = !localRoomState;
+  const isViewingVictoryModal = document.getElementById('victory-modal').style.display === 'flex';
   localRoomState = state;
   if (state.status === 'LOBBY') {
+    if (isViewingVictoryModal) {
+      refreshLocalRoomView(state);
+      return;
+    }
     clearTimeout(victoryModalTimer);
     victoryModalTimer = null;
     document.getElementById('victory-modal').style.display = 'none';
@@ -243,7 +248,7 @@ function handleTimerTick({ timeLeft }) {
 
 function handleGameStarted() {
   renderAppView(APP_VIEW.PLAYING);
-  log('SERVER ĐÃ KÍCH HOẠT BẮT ĐẦU TRẬN ĐẤU REALTIME!', 'server', 'rocket');
+  log('TRẬN ĐẤU BẮT ĐẦU!', 'server', 'rocket');
 }
 
 function sortPlayersByScore(players) {
@@ -362,6 +367,10 @@ function handleLeaveRoomClick() {
 
 function handleCloseVictoryClick() {
   document.getElementById('victory-modal').style.display = 'none';
+  if (localRoomState && localRoomState.status === 'LOBBY') {
+    if (typeof resetGameVisualState === 'function') resetGameVisualState();
+    renderAppView(APP_VIEW.ROOM_WAITING);
+  }
 }
 
 function setRestartButtonsDisabled(disabled) {
