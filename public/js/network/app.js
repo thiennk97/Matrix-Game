@@ -437,6 +437,16 @@ function handleChatMessage({ sender, msg, playerId }) {
   chatMessagesEl.appendChild(buildChatMessageElement(sender, msg, isMe, color));
   trimChatHistory();
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+
+  const trimmedMsg = msg.trim();
+  const tauntNumber = parseInt(trimmedMsg, 10);
+
+  if (!isNaN(tauntNumber) && tauntNumber >= 1 && tauntNumber <= 40) {
+    const audio = new Audio(`/audio/taunts/${tauntNumber}.ogg`);
+    audio.play().catch(e => {
+      console.log('Taunt audio not found or autoplay blocked:', e);
+    });
+  }
 }
 
 function handleLobbyRoomsUpdate({ rooms }) {
