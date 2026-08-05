@@ -125,7 +125,14 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('create_room', async (payload, ack) => {
+      if (socket.isCreatingRoom) return;
+      if (socketToPlayerMap.has(socket.id)) {
+        replyError(ack, 'Bạn đã ở trong một phòng', 'ALREADY_IN_ROOM');
+        return;
+      }
+      
       try {
+        socket.isCreatingRoom = true;
         const normalizedName = requirePlayerName(payload?.playerName);
 
         const { room, playerId, playerIndex } = await roomService.createRoom(
@@ -151,11 +158,20 @@ export function registerSocketHandlers(io) {
         await broadcastLobbyRooms(io);
       } catch (err) {
         replyError(ack, err.message, err.code);
+      } finally {
+        socket.isCreatingRoom = false;
       }
     });
 
     socket.on('join_room', async (payload, ack) => {
+      if (socket.isJoiningRoom) return;
+      if (socketToPlayerMap.has(socket.id)) {
+        replyError(ack, 'Bạn đã ở trong một phòng', 'ALREADY_IN_ROOM');
+        return;
+      }
+
       try {
+        socket.isJoiningRoom = true;
         const normalizedName = requirePlayerName(payload?.playerName);
 
         const res = await roomService.joinRoom(payload.roomCode, normalizedName, socket.id);
@@ -185,6 +201,8 @@ export function registerSocketHandlers(io) {
         await broadcastLobbyRooms(io);
       } catch (err) {
         replyError(ack, err.message, err.code);
+      } finally {
+        socket.isJoiningRoom = false;
       }
     });
 

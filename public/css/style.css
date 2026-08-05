@@ -1627,6 +1627,11 @@ header {
 }
 
 @media (max-width: 480px) {
+  /* Prevent iOS Safari auto-zoom on focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
   header {
     padding: 0.45rem 0.75rem;
   }
@@ -1641,6 +1646,43 @@ header {
 
   .main-layout {
     padding: var(--space-2);
+  }
+
+  #opponents-section {
+    display: none !important;
+  }
+
+  .chat-panel {
+    position: static;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
+
+  .chat-panel #chat-toggle-icon {
+    display: none;
+  }
+
+  .chat-panel .chat-header {
+    pointer-events: none;
+  }
+
+  .chat-panel.collapsed .chat-body {
+    display: flex !important;
+  }
+
+  .chat-body {
+    height: 300px;
+  }
+
+  .chat-messages {
+    order: 2;
+  }
+
+  .chat-input-row {
+    order: 1;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
   }
 
   .panel-section {
@@ -1712,6 +1754,8 @@ header {
 
   .rank-card {
     grid-template-columns: 58px minmax(0, 1fr) auto;
+    min-height: 48px;
+    padding: 0.4rem 0.6rem;
   }
 
   .rank-badge,
@@ -1720,7 +1764,17 @@ header {
     font-size: 0.85rem;
   }
 
+  .rank-card-gold .rank-name,
+  .rank-card-gold .rank-score strong {
+    font-size: 0.95rem;
+  }
+
   .rank-score span {
     font-size: 0.58rem;
+  }
+
+  .modal-scores {
+    gap: 6px;
+    max-height: 50vh;
   }
 }

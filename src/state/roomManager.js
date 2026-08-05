@@ -131,11 +131,11 @@ export async function resumeRoomTimer(io, roomCode) {
   room.status = ROOM_STATUS.PLAYING;
   room.stateVersion++;
 
-  await saveRoom(room);
-  emitRoomState(io, room);
-
   const runtime = getOrCreateRuntime(roomCode);
   runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
+
+  await saveRoom(room);
+  emitRoomState(io, room);
 }
 
 export async function startServerTurnTimer(io, roomCode) {
@@ -150,11 +150,12 @@ export async function startServerTurnTimer(io, roomCode) {
   room.stateVersion++;
 
   resetTurnPlacementState(room);
-  await saveRoom(room);
-  emitRoomState(io, room);
 
   const runtime = getOrCreateRuntime(roomCode);
   runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
+
+  await saveRoom(room);
+  emitRoomState(io, room);
 }
 
 async function tickTurnTimer(io, roomCode) {

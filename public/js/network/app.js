@@ -93,6 +93,8 @@ function resetClientRoomState() {
   if (typeof resetGameVisualState === 'function') resetGameVisualState();
 }
 
+let renderBoardTimeout = null;
+
 function renderAppView(view) {
   const viewIndex = document.getElementById('view-index');
   const viewGame = document.getElementById('view-game');
@@ -220,6 +222,7 @@ function handleRoomStateUpdate(state) {
   const isViewingVictoryModal = document.getElementById('victory-modal').style.display === 'flex';
   localRoomState = state;
   if (state.status === 'LOBBY') {
+    if (typeof resetGameVisualState === 'function') resetGameVisualState();
     if (isViewingVictoryModal) {
       refreshLocalRoomView(state);
       return;
@@ -227,7 +230,6 @@ function handleRoomStateUpdate(state) {
     clearTimeout(victoryModalTimer);
     victoryModalTimer = null;
     document.getElementById('victory-modal').style.display = 'none';
-    if (typeof resetGameVisualState === 'function') resetGameVisualState();
     renderAppView(APP_VIEW.ROOM_WAITING);
   } else if (state.status === 'PLAYING') renderAppView(APP_VIEW.PLAYING);
   else if (state.status === 'PAUSED') renderAppView(APP_VIEW.PAUSED);
@@ -307,14 +309,28 @@ function handleGameOver(state) {
   }, VICTORY_MODAL_DELAY_MS);
 }
 
+let isSubmittingName = false;
+
 function handleJoinRoomSubmit(code, isCreate) {
+  if (isSubmittingName) return;
+
   const nameInput = document.getElementById('name-modal-input');
   const playerName = nameInput.value.trim();
   nameInput.setCustomValidity(playerName ? '' : 'Tên người chơi là bắt buộc.');
   if (!nameInput.reportValidity()) return;
 
+  isSubmittingName = true;
+  const btnSubmitName = document.getElementById('btn-name-modal-submit');
+  if (btnSubmitName) btnSubmitName.disabled = true;
+
+  const resetSubmitState = () => {
+    isSubmittingName = false;
+    if (btnSubmitName) btnSubmitName.disabled = false;
+  };
+
   if (isCreate) {
     socket.emit('create_room', { playerName }, (res) => {
+      resetSubmitState();
       if (res.ok) {
         document.getElementById('name-modal').style.display = 'none';
         handleAssignedRole(res.data);
@@ -325,6 +341,7 @@ function handleJoinRoomSubmit(code, isCreate) {
     });
   } else {
     socket.emit('join_room', { roomCode: code, playerName }, (res) => {
+      resetSubmitState();
       if (res.ok) {
         document.getElementById('name-modal').style.display = 'none';
         handleAssignedRole(res.data);

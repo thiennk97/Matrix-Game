@@ -161,6 +161,11 @@ function renderOpponentBoards(state) {
   var section = document.getElementById('opponents-section');
   if (!container || !section) return;
 
+  if (window.innerWidth <= 480) {
+    if (section.style.display !== 'none') section.style.display = 'none';
+    return;
+  }
+
   if (!shouldShowOpponents(state)) {
     section.style.display = 'none';
     return;
