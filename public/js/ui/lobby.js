@@ -43,6 +43,19 @@ function openNameModal(roomCode = '', isCreate = false) {
   setTimeout(() => nameInput.focus(), 50);
 }
 
+function buildRoomActionButtonHtml(r) {
+  if (r.status === 'LOBBY') {
+    return `
+      <button class="btn btn-primary btn-sm btn-join-public" data-code="${r.roomCode}">
+        <i data-lucide="log-in" style="width:16px;height:16px;vertical-align:-3px"></i> Tham gia
+      </button>`;
+  }
+  return `
+      <button class="btn btn-cyan btn-sm btn-spectate-public" data-code="${r.roomCode}">
+        <i data-lucide="eye" style="width:16px;height:16px;vertical-align:-3px"></i> Hóng
+      </button>`;
+}
+
 function renderPublicRooms(rooms) {
   const container = document.getElementById('public-rooms-container');
   if (!container) return;
@@ -64,9 +77,7 @@ function renderPublicRooms(rooms) {
       } <i data-lucide="users" style="width:14px;height:14px;vertical-align:-2px"></i></span>
       </div>
       <div class="room-card-host">Host: ${escapeHtml(r.hostName)}</div>
-      <button class="btn btn-primary btn-sm btn-join-public" data-code="${r.roomCode}">
-        <i data-lucide="log-in" style="width:16px;height:16px;vertical-align:-3px"></i> Tham gia
-      </button>
+      ${buildRoomActionButtonHtml(r)}
     </div>
   `
     )
@@ -78,6 +89,13 @@ function renderPublicRooms(rooms) {
     btn.addEventListener('click', (e) => {
       const code = e.currentTarget.getAttribute('data-code');
       openNameModal(code, false);
+    });
+  });
+
+  container.querySelectorAll('.btn-spectate-public').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const code = e.currentTarget.getAttribute('data-code');
+      handleSpectateRoomClick(code);
     });
   });
 }

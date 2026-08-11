@@ -43,8 +43,9 @@ function resetLeaderboardVisualState() {
 }
 
 function buildScoreRow(player, rank, isMe, rankChange, leaderChanged) {
+  var isFocused = isSpectating && player.id === spectateFocusedPlayerId;
   var row = document.createElement('div');
-  row.className = 'match-item' + (isMe ? ' active' : '');
+  row.className = 'match-item' + (isMe || isFocused ? ' active' : '');
   row.dataset.playerId = player.id;
 
   if (rank === 0) row.classList.add('leader');
@@ -56,7 +57,12 @@ function buildScoreRow(player, rank, isMe, rankChange, leaderChanged) {
   if (!isMe) {
     row.style.cursor = 'pointer';
     row.onclick = () => {
-      if (player.id) scrollToOpponentBoard(player.id);
+      if (!player.id) return;
+      if (isSpectating) {
+        handleFocusPlayer(player.id);
+      } else {
+        scrollToOpponentBoard(player.id);
+      }
     };
   }
 

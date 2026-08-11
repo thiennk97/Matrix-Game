@@ -15,7 +15,8 @@ import {
   buildRoomStatePayload,
   pauseRoom,
   resumeRoomTimer,
-  setAutoPlacePreference
+  setAutoPlacePreference,
+  broadcastLobbyRooms
 } from '../state/roomManager.js';
 
 const MAX_CHAT_LENGTH = 100;
@@ -23,18 +24,6 @@ const MAX_PLAYER_NAME_LENGTH = 24;
 const ALLOWED_TURN_TIMES = [5, 8, 10, 15];
 
 const socketToPlayerMap = new Map();
-
-function buildLobbyRoomSummary(room) {
-  const host = room.players.find((player) => player.id === room.hostPlayerId);
-  return {
-    roomCode: room.roomCode,
-    hostName: host.name,
-    playerCount: room.players.length,
-    maxPlayers: 8,
-    createdAt: room.createdAt,
-    updatedAt: room.updatedAt
-  };
-}
 
 function reply(ack, payload) {
   if (typeof ack === 'function') ack(payload);
@@ -100,13 +89,6 @@ async function advanceIfAllPlaced(io, room, roomCode) {
   await finishCurrentTurn(io, roomCode);
 }
 
-async function broadcastLobbyRooms(io) {
-  const rooms = await roomService.listOpenRooms();
-  io.to('public_lobby').emit('lobby_rooms_update', {
-    rooms: rooms.map(buildLobbyRoomSummary)
-  });
-}
-
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`🟢 Client connected: ${socket.id}`);
@@ -114,10 +96,9 @@ export function registerSocketHandlers(io) {
     socket.on('list_rooms', async (data, ack) => {
       try {
         socket.join('public_lobby');
-        const rooms = await roomService.listOpenRooms();
         reply(ack, {
           ok: true,
-          data: { rooms: rooms.map(buildLobbyRoomSummary) }
+          data: { rooms: await roomService.listAllRoomSummaries() }
         });
       } catch (err) {
         replyError(ack, err.message);
@@ -221,6 +202,36 @@ export function registerSocketHandlers(io) {
       } catch (err) {
         replyError(ack, err.message);
       }
+    });
+
+    socket.on('spectate_room', (payload, ack) => {
+      try {
+        const roomCode = String(payload?.roomCode || '').trim().toUpperCase();
+        const room = getRoomFromMemory(roomCode);
+
+        if (!room || (room.status !== ROOM_STATUS.PLAYING && room.status !== ROOM_STATUS.PAUSED)) {
+          replyError(ack, 'Trận đấu không tồn tại hoặc đã kết thúc.', 'ROOM_NOT_ACTIVE');
+          return;
+        }
+
+        socket.leave('public_lobby');
+        socket.join(room.roomCode);
+
+        reply(ack, {
+          ok: true,
+          data: {
+            roomCode: room.roomCode,
+            state: buildRoomStatePayload(room)
+          }
+        });
+      } catch (err) {
+        replyError(ack, err.message);
+      }
+    });
+
+    socket.on('stop_spectating', ({ roomCode } = {}, ack) => {
+      if (roomCode) socket.leave(String(roomCode).trim().toUpperCase());
+      reply(ack, { ok: true });
     });
 
     socket.on('leave_room', async ({ roomCode, playerId }, ack) => {
@@ -335,7 +346,6 @@ export function registerSocketHandlers(io) {
         });
 
         await roomService.saveRoom(room);
-        await roomService.removeOpenRoom(room.roomCode);
 
         io.to(room.roomCode).emit('game_started');
         await startServerTurnTimer(io, room.roomCode);

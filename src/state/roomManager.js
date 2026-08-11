@@ -1,6 +1,6 @@
 import { TOTAL_SLOTS, VERTICAL_SLOTS, ROOM_STATUS } from '../config/constants.js';
 import { calculateScoreIncremental } from '../core/gameLogic.js';
-import { saveRoom } from '../services/roomService.js';
+import { saveRoom, listAllRoomSummaries } from '../services/roomService.js';
 
 const rooms = new Map();
 
@@ -59,6 +59,12 @@ export function buildRoomStatePayload(room) {
 
 function emitRoomState(io, room) {
   io.to(room.roomCode).emit('room_state_update', buildRoomStatePayload(room));
+}
+
+export async function broadcastLobbyRooms(io) {
+  io.to('public_lobby').emit('lobby_rooms_update', {
+    rooms: await listAllRoomSummaries()
+  });
 }
 
 function resetTurnPlacementState(room) {
@@ -230,6 +236,7 @@ async function endGame(io, roomCode, room) {
 
   rooms.delete(roomCode);
   roomRuntimes.delete(roomCode);
+  await broadcastLobbyRooms(io);
 }
 
 async function advanceNextTurnServer(io, roomCode) {

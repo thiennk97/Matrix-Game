@@ -5,7 +5,8 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "stop": "kill $(lsof -ti tcp:${PORT:-4000}) 2>/dev/null || echo 'No server running on port '${PORT:-4000}"
   },
   "dependencies": {
     "express": "^4.19.2",

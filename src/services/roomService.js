@@ -233,10 +233,24 @@ export function listOpenRooms() {
   return repo.listOpenRooms();
 }
 
-export async function saveRoom(room) {
-  await repo.saveRoom(room);
+function buildRoomSummary(room) {
+  const host = room.players.find((player) => player.id === room.hostPlayerId);
+  return {
+    roomCode: room.roomCode,
+    hostName: host ? host.name : '???',
+    playerCount: room.players.filter((player) => !player.abandoned).length,
+    maxPlayers: MAX_PLAYERS,
+    status: room.status,
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt
+  };
 }
 
-export function removeOpenRoom(roomCode) {
-  return repo.removeOpenRoom(roomCode);
+export async function listAllRoomSummaries() {
+  const rooms = await repo.listOpenRooms();
+  return rooms.map(buildRoomSummary);
+}
+
+export async function saveRoom(room) {
+  await repo.saveRoom(room);
 }

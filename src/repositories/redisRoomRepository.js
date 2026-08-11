@@ -83,34 +83,30 @@ async function listOpenRooms(limit = 100) {
   const keys = roomCodes.map(getRoomKey);
   const dataList = await client.mGet(keys);
 
-  const activeRooms = [];
-  const staleRooms = [];
+  const rooms = [];
+  const deadRoomCodes = [];
 
   for (let i = 0; i < dataList.length; i++) {
     const data = dataList[i];
     const roomCode = roomCodes[i];
 
-    if (data) {
-      try {
-        const room = JSON.parse(data);
-        if (room.status === 'LOBBY' && room.players.length < 8) {
-          activeRooms.push(room);
-        } else {
-          staleRooms.push(roomCode);
-        }
-      } catch (err) {
-        staleRooms.push(roomCode);
-      }
-    } else {
-      staleRooms.push(roomCode);
+    if (!data) {
+      deadRoomCodes.push(roomCode);
+      continue;
+    }
+
+    try {
+      rooms.push(JSON.parse(data));
+    } catch (err) {
+      deadRoomCodes.push(roomCode);
     }
   }
 
-  if (staleRooms.length > 0) {
-    client.zRem(LOBBY_INDEX_KEY, staleRooms).catch(console.error);
+  if (deadRoomCodes.length > 0) {
+    client.zRem(LOBBY_INDEX_KEY, deadRoomCodes).catch(console.error);
   }
 
-  return activeRooms;
+  return rooms;
 }
 
 export {

@@ -6,6 +6,7 @@ var lastHoveredC = -1;
 var hoverTimeout = null;
 var preferredAutoPlaceTurn = -1;
 var preferredAutoPlaceSlotIdx = null;
+var spectateFocusedPlayerId = null;
 
 function getSlotIndexForCell(r, c) {
   return c * 3 + Math.floor(r / 3);
@@ -19,6 +20,21 @@ function findPlayerById(players) {
 function getMyPlayer(state) {
   if (!state || !state.players) return null;
   return findPlayerById(state.players);
+}
+
+function getFocusedSpectatePlayer(state) {
+  if (!state || !state.players || state.players.length === 0) return null;
+  return state.players.find((p) => p.id === spectateFocusedPlayerId) || state.players[0];
+}
+
+function resolveDisplayPlayer(state) {
+  return isSpectating ? getFocusedSpectatePlayer(state) : getMyPlayer(state);
+}
+
+function handleFocusPlayer(playerId) {
+  if (!isSpectating || !playerId || playerId === spectateFocusedPlayerId) return;
+  spectateFocusedPlayerId = playerId;
+  if (localRoomState) refreshLocalRoomView(localRoomState);
 }
 
 function isSlotEmptyOnBoard(board, coords) {
@@ -146,15 +162,20 @@ function renderPieceDisplay(state) {
     return;
   }
 
-  var myPlayer = getMyPlayer(state);
-  if (myPlayer && myPlayer.hasPlacedThisRound) {
+  var displayPlayer = resolveDisplayPlayer(state);
+  if (displayPlayer && displayPlayer.hasPlacedThisRound) {
     pieceDisplayEl.style.background = 'transparent';
     return;
   }
 
+  var colorIndex = isSpectating
+    ? displayPlayer
+      ? displayPlayer.seatIndex
+      : -1
+    : myPlayerIndex;
   var myColorStr =
-    typeof PLAYER_COLORS !== 'undefined' && myPlayerIndex >= 0
-      ? PLAYER_COLORS[myPlayerIndex] || '#fbbf24'
+    typeof PLAYER_COLORS !== 'undefined' && colorIndex >= 0
+      ? PLAYER_COLORS[colorIndex] || '#fbbf24'
       : '#fbbf24';
   pieceDisplayEl.style.background = myColorStr;
 
@@ -172,16 +193,17 @@ function rgbValuesToHex(rgb) {
 
 var LAST_PLACED_DARKEN_FACTOR = 0.75;
 
-function getMyDisplayColors() {
+function getMyDisplayColors(colorIndex) {
+  var idx = typeof colorIndex === 'number' ? colorIndex : myPlayerIndex;
   var defaultColors = {
     colorHex: 0xfacc15,
     lastPlacedColorHex: 0xfacc15,
     hoverHex: 0xfef08a,
     textColor: '#854d0e'
   };
-  if (typeof PLAYER_COLORS === 'undefined' || myPlayerIndex < 0) return defaultColors;
+  if (typeof PLAYER_COLORS === 'undefined' || idx < 0) return defaultColors;
 
-  var myColor = PLAYER_COLORS[myPlayerIndex];
+  var myColor = PLAYER_COLORS[idx];
   if (!myColor) return defaultColors;
 
   var rawColorHex = rgbValuesToHex(colorToRgbValues(myColor));
@@ -354,13 +376,14 @@ function updateBoardCells(myBoard, cellColorGrid) {
 }
 
 function updateBoardInteractivity(state, myHasPlaced) {
-  var isPlaying = state.status === 'PLAYING';
+  var isPlaying = state.status === 'PLAYING' && !isSpectating;
   var isLocked = !isPlaying || myHasPlaced;
   pixiGridContainer.interactiveChildren = isPlaying;
   pixiGridContainer.cursor = isLocked ? 'not-allowed' : 'default';
 }
 
 var prevMyBoardSnapshot = null;
+var prevFocusedPlayerId = null;
 var lastPlacedCoords = [];
 
 function resetGameVisualState() {
@@ -368,6 +391,8 @@ function resetGameVisualState() {
   setHoveredCell(-1, -1);
   preferredAutoPlaceTurn = -1;
   preferredAutoPlaceSlotIdx = null;
+  spectateFocusedPlayerId = null;
+  prevFocusedPlayerId = null;
   lastPlacedCoords = [];
   prevMyBoardSnapshot = null;
   if (typeof resetLeaderboardVisualState === 'function') resetLeaderboardVisualState();
@@ -400,9 +425,16 @@ function triggerNewPlacementBounces(myBoard, lastPlacedColorHex) {
 function renderBoard(state, myPlayer) {
   if (!pixiCells || pixiCells.length !== 81) return;
 
+  if (isSpectating && myPlayer.id !== prevFocusedPlayerId) {
+    prevFocusedPlayerId = myPlayer.id;
+    prevMyBoardSnapshot = null;
+    lastPlacedCoords = [];
+  }
+
   var myBoard = myPlayer.board;
   var myHasPlaced = myPlayer.hasPlacedThisRound;
-  var colors = getMyDisplayColors();
+  var colorIndex = isSpectating ? myPlayer.seatIndex : myPlayerIndex;
+  var colors = getMyDisplayColors(colorIndex);
 
   triggerNewPlacementBounces(myBoard, colors.lastPlacedColorHex);
 
@@ -424,10 +456,11 @@ function renderBoard(state, myPlayer) {
 function render(state) {
   if (!state) return;
 
-  var myPlayer = getMyPlayer(state);
+  renderScoreBreakdown(state);
+
+  var myPlayer = resolveDisplayPlayer(state);
   if (!myPlayer) return;
 
   renderBoard(state, myPlayer);
   updateMatchLinesTwangState(myPlayer.matchedLines || []);
-  renderScoreBreakdown(state);
 }

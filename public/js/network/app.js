@@ -17,6 +17,7 @@ var myPlayerId = null;
 var currentRoomCode = '';
 var localRoomState = null;
 var hasJoinedRoom = false;
+var isSpectating = false;
 
 const APP_VIEW = {
   INDEX: 'INDEX',
@@ -85,12 +86,21 @@ function resetClientRoomState() {
   currentRoomCode = '';
   currentTurn = -1;
   hasJoinedRoom = false;
+  isSpectating = false;
   localRoomState = null;
   myPlayerId = null;
   myPlayerIndex = -1;
   resetCopyLinkButton();
   document.getElementById('victory-modal').style.display = 'none';
   if (typeof resetGameVisualState === 'function') resetGameVisualState();
+
+  chatInput.disabled = false;
+  chatInput.placeholder = 'Nhập tin nhắn...';
+  btnSendChat.disabled = false;
+  document.getElementById('btn-leave-room').innerHTML = iconHtml('log-out') + ' Thoát phòng';
+
+  const opponentsTitle = document.querySelector('#opponents-section .panel-title span');
+  if (opponentsTitle) opponentsTitle.innerHTML = iconHtml('eye') + ' Bàn Đối Thủ';
 }
 
 function renderAppView(view) {
@@ -131,6 +141,10 @@ function renderAppView(view) {
       btnRestart.style.display = 'inline-flex';
       opponentsSection.style.display = 'block';
     }
+  }
+
+  if (isSpectating) {
+    btnRestart.style.display = 'none';
   }
 }
 
@@ -242,6 +256,37 @@ function handleRoomStateUpdate(state) {
   refreshLocalRoomView(state);
 }
 
+function handleSpectateRoomClick(roomCode) {
+  socket.emit('spectate_room', { roomCode }, (res) => {
+    if (!res?.ok) {
+      alert(res?.error?.message || 'Không thể xem trận đấu này.');
+      return;
+    }
+    handleAssignedSpectatorRole(res.data);
+  });
+}
+
+function handleAssignedSpectatorRole({ roomCode, state }) {
+  myPlayerIndex = -1;
+  myPlayerId = null;
+  currentRoomCode = roomCode;
+  hasJoinedRoom = true;
+  isSpectating = true;
+  spectateFocusedPlayerId = state.players[0] ? state.players[0].id : null;
+
+  chatInput.disabled = true;
+  chatInput.placeholder = 'Người xem không thể chat';
+  btnSendChat.disabled = true;
+  document.getElementById('btn-leave-room').innerHTML =
+    iconHtml('log-out') + ' Ngừng xem';
+
+  const opponentsTitle = document.querySelector('#opponents-section .panel-title span');
+  if (opponentsTitle) opponentsTitle.innerHTML = iconHtml('eye') + ' Bàn Đấu Thủ';
+
+  handleRoomStateUpdate(state);
+  log(`Bạn đang xem trận đấu [${roomCode}]`, 'server', 'eye');
+}
+
 function handleTimerTick({ timeLeft }) {
   updateTimerUI(timeLeft);
 }
@@ -293,7 +338,9 @@ function showVictoryModal(sortedPlayers) {
   document.getElementById('modal-scores').innerHTML = sortedPlayers
     .map((p, i) => buildRankCardHtml(p, i))
     .join('');
-  document.getElementById('btn-modal-restart').style.display = 'inline-flex';
+  document.getElementById('btn-modal-restart').style.display = isSpectating ? 'none' : 'inline-flex';
+  document.getElementById('btn-modal-leave').innerHTML =
+    iconHtml('log-out') + (isSpectating ? ' Ngừng xem' : ' Thoát Phòng');
   document.getElementById('victory-modal').style.display = 'flex';
   refreshIcons();
 }
@@ -351,8 +398,18 @@ function handleStartGameClick() {
 }
 
 function handleLeaveRoomClick() {
-  if (!currentRoomCode || !myPlayerId) return;
+  if (!currentRoomCode) return;
 
+  if (isSpectating) {
+    socket.emit('stop_spectating', { roomCode: currentRoomCode }, () => {
+      resetClientRoomState();
+      renderAppView(APP_VIEW.INDEX);
+      fetchAndRenderRooms();
+    });
+    return;
+  }
+
+  if (!myPlayerId) return;
   socket.emit('leave_room', { roomCode: currentRoomCode, playerId: myPlayerId }, (res) => {
     if (!res?.ok) {
       alert(res?.error?.message || 'Không thể thoát phòng.');
@@ -415,6 +472,7 @@ document.getElementById('btn-modal-leave')?.addEventListener('click', () => {
 document.getElementById('btn-modal-restart')?.addEventListener('click', handleRestartGameClick);
 
 function sendChatMessage() {
+  if (isSpectating) return;
   const text = chatInput.value.trim();
   if (!text) return;
   socket.emit('chat_message', text);

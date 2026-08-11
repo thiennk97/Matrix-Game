@@ -11,7 +11,8 @@ function getOpponentTheme(playerIndex) {
 }
 
 function shouldShowOpponents(state) {
-  return !!(state && state.players && state.players.length > 1 && state.isGameStarted);
+  if (!state || !state.players || !state.isGameStarted) return false;
+  return isSpectating ? state.players.length > 0 : state.players.length > 1;
 }
 
 function createMiniGridCells() {
@@ -179,6 +180,17 @@ function renderOpponentBoards(state) {
     updateOpponentCardHeader(entry, player);
     updateOpponentCells(entry.cellEls, player.board, theme.solid);
     updateOpponentMatchLines(entry, player.matchedLines);
+
+    if (isSpectating) {
+      entry.card.style.cursor = 'pointer';
+      var isFocused = player.id === spectateFocusedPlayerId;
+      entry.card.style.boxShadow = isFocused ? '0 0 0 3px ' + theme.solid : '';
+      entry.card.onclick = () => handleFocusPlayer(player.id);
+    } else {
+      entry.card.style.cursor = 'default';
+      entry.card.style.boxShadow = '';
+      entry.card.onclick = null;
+    }
   });
 
   removeStaleOpponentCards(activePlayerIds);
