@@ -19,6 +19,10 @@ function logStartupBanner(port) {
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 const server = http.createServer(app);
 const io = new Server(server);
 registerSocketHandlers(io);

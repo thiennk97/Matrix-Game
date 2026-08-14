@@ -345,9 +345,11 @@ export function registerSocketHandlers(io) {
           p.matchedLines = [];
         });
 
+        room.stateVersion++;
         await roomService.saveRoom(room);
 
         io.to(room.roomCode).emit('game_started');
+        emitRoomState(io, room);
         await startServerTurnTimer(io, room.roomCode);
 
         reply(ack, { ok: true });
@@ -436,6 +438,8 @@ export function registerSocketHandlers(io) {
         player.hasPlacedThisRound = true;
         setAutoPlacePreference(room.roomCode, player.id, null);
         applyMoveScore(player, coords);
+
+        room.stateVersion++;
 
         await roomService.saveRoom(room);
         emitRoomState(io, room);

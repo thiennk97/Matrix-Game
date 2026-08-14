@@ -1,11 +1,10 @@
 import { TOTAL_SLOTS, VERTICAL_SLOTS, ROOM_STATUS } from '../config/constants.js';
 import { calculateScoreIncremental } from '../core/gameLogic.js';
-import { saveRoom, listAllRoomSummaries } from '../services/roomService.js';
+import { saveRoom, removeRoomFromLobby, listAllRoomSummaries } from '../services/roomService.js';
 
 const rooms = new Map();
 
 const roomRuntimes = new Map();
-const TURN_TRANSITION_DELAY_MS = 500;
 
 function getPublicPlayers(room) {
   return room.players.map((p) => ({
@@ -79,7 +78,6 @@ function getOrCreateRuntime(roomCode) {
   if (!runtime) {
     runtime = {
       timerInterval: null,
-      transitionTimeout: null,
       isTransitioning: false,
       preferredSlots: new Map()
     };
@@ -99,10 +97,6 @@ function stopTurnInterval(roomCode) {
 function stopTimer(roomCode) {
   const runtime = roomRuntimes.get(roomCode);
   stopTurnInterval(roomCode);
-  if (runtime && runtime.transitionTimeout) {
-    clearTimeout(runtime.transitionTimeout);
-    runtime.transitionTimeout = null;
-  }
   if (runtime) runtime.isTransitioning = false;
 }
 
@@ -141,7 +135,7 @@ export async function resumeRoomTimer(io, roomCode) {
   emitRoomState(io, room);
 
   const runtime = getOrCreateRuntime(roomCode);
-  runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
+  runtime.timerInterval = setInterval(() => { tickTurnTimer(io, roomCode).catch(console.error); }, 100);
 }
 
 export async function startServerTurnTimer(io, roomCode) {
@@ -160,7 +154,7 @@ export async function startServerTurnTimer(io, roomCode) {
   emitRoomState(io, room);
 
   const runtime = getOrCreateRuntime(roomCode);
-  runtime.timerInterval = setInterval(() => tickTurnTimer(io, roomCode), 100);
+  runtime.timerInterval = setInterval(() => { tickTurnTimer(io, roomCode).catch(console.error); }, 100);
 }
 
 async function tickTurnTimer(io, roomCode) {
@@ -236,6 +230,7 @@ async function endGame(io, roomCode, room) {
 
   rooms.delete(roomCode);
   roomRuntimes.delete(roomCode);
+  await removeRoomFromLobby(roomCode);
   await broadcastLobbyRooms(io);
 }
 
@@ -269,14 +264,9 @@ export async function finishCurrentTurn(io, roomCode) {
     await saveRoom(room);
     emitRoomState(io, room);
 
-    runtime.transitionTimeout = setTimeout(() => {
-      runtime.transitionTimeout = null;
-      runtime.isTransitioning = false;
-      void advanceNextTurnServer(io, roomCode).catch(console.error);
-    }, TURN_TRANSITION_DELAY_MS);
-  } catch (error) {
+    await advanceNextTurnServer(io, roomCode);
+  } finally {
     runtime.isTransitioning = false;
-    throw error;
   }
 }
 
@@ -285,7 +275,6 @@ export function loadRoomToMemory(room) {
   if (!roomRuntimes.has(room.roomCode)) {
     roomRuntimes.set(room.roomCode, {
       timerInterval: null,
-      transitionTimeout: null,
       isTransitioning: false,
       preferredSlots: new Map()
     });

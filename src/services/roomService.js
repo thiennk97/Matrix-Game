@@ -123,8 +123,7 @@ export async function leaveRoom(roomCode, playerId) {
   room.stateVersion++;
 
   if (room.hostPlayerId === playerId) {
-    room.hostPlayerId =
-      room.status === ROOM_STATUS.LOBBY ? findFirstActivePlayer(room)?.id || null : null;
+    room.hostPlayerId = findFirstActivePlayer(room)?.id || null;
   }
 
   const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
@@ -253,4 +252,12 @@ export async function listAllRoomSummaries() {
 
 export async function saveRoom(room) {
   await repo.saveRoom(room);
+}
+
+export async function deleteRoom(roomCode) {
+  await repo.deleteRoom(roomCode);
+}
+
+export async function removeRoomFromLobby(roomCode) {
+  await repo.removeOpenRoom(roomCode);
 }
