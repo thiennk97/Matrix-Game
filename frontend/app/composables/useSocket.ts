@@ -61,6 +61,7 @@ function applyRoomState(state: RoomState) {
   }
   store.localRoomState = state
   store.timeLeft = state.timeLeft
+  store.turnEndsAt = state.turnEndsAt || null
 
   if (nowFinished && !wasFinished) {
     if (victoryModalTimer) clearTimeout(victoryModalTimer)
@@ -89,8 +90,11 @@ export const useSocket = () => {
 
     socket.on('room_state_update', applyRoomState)
 
-    socket.on('timer_tick', ({ timeLeft }: { timeLeft: number }) => {
+    socket.on('timer_tick', ({ timeLeft, turnEndsAt }: { timeLeft: number; turnEndsAt?: number | null }) => {
       store.timeLeft = timeLeft
+      if (turnEndsAt !== undefined) {
+        store.turnEndsAt = turnEndsAt
+      }
     })
 
     socket.on('chat_message', (msg: ChatMessage) => {
@@ -127,6 +131,10 @@ export const useSocket = () => {
     }
   }
 
+  const emit = (event: string, payload: unknown = {}) => {
+    socket?.emit(event, payload)
+  }
+
   const emitAck = (event: string, payload: unknown = {}): Promise<AckResponse> => {
     return new Promise((resolve) => {
       socket?.emit(event, payload, (res: AckResponse) => resolve(res))
@@ -136,6 +144,7 @@ export const useSocket = () => {
   return {
     socket,
     connect,
+    emit,
     emitAck,
     applyRoomState,
     resetSession,

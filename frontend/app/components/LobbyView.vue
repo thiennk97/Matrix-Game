@@ -433,51 +433,43 @@ const startGame = async () => {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
   color: var(--matchbox-gold);
-  padding: 0.4rem 0.6rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 700;
   outline: none;
   cursor: pointer;
+  -webkit-appearance: none;
 }
 
-.game-pause-overlay,
 .room-waiting-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(11, 17, 32, 0.85);
-  backdrop-filter: blur(12px);
-  z-index: 10;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  gap: var(--space-4);
-  text-align: center;
-}
-
-.room-waiting-overlay {
   align-items: stretch;
-  justify-content: flex-start;
-  padding: var(--space-4);
+  gap: var(--space-4);
+  width: 100%;
 }
 
 @media (max-width: 1180px) {
 
   .lobby-players-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
+    gap: 8px;
   }
 
   .player-slot-card {
-    padding: 6px;
-    gap: 4px;
+    padding: 8px;
+    gap: 6px;
+    min-height: 42px;
   }
 
   .slot-player-name {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
+  }
+
+  .lobby-room-buttons .btn {
+    min-height: 44px;
   }
 }
 
@@ -485,15 +477,33 @@ const startGame = async () => {
 
   .lobby-players-grid {
     grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .player-slot-card {
+    padding: 8px 10px;
+    min-height: 44px;
   }
 
   .timer-select-group {
     align-items: stretch;
     flex-direction: column;
+    gap: 8px;
   }
 
   .timer-select-group label {
     white-space: normal;
+  }
+
+  .timer-select-group select {
+    width: 100%;
+    text-align: center;
+  }
+
+  #btn-copy-link {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
   }
 }
 </style>

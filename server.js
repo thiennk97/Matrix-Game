@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { registerSocketHandlers } from './src/network/socketHandler.js';
 import { connectRedis, disconnectRedis } from './src/config/redis.js';
+import { cleanupStaleRoomsOnStartup } from './src/services/roomService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -30,6 +31,7 @@ registerSocketHandlers(io);
 async function startServer() {
   try {
     await connectRedis();
+    await cleanupStaleRoomsOnStartup();
     server.listen(PORT, () => logStartupBanner(PORT));
   } catch (err) {
     console.error('Failed to start server:', err);

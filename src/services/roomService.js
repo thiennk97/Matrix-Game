@@ -127,13 +127,19 @@ export async function leaveRoom(roomCode, playerId) {
   }
 
   const hasRemainingPlayers = room.players.some((p) => !p.abandoned);
+  const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
 
-  if (!hasRemainingPlayers) {
+  // In LOBBY: delete room if no players remain or no online players remain
+  if (room.status === ROOM_STATUS.LOBBY && (!hasOnlinePlayers || room.players.length === 0)) {
     await repo.deleteRoom(roomCode);
     return null;
   }
 
-  const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
+  // In PLAYING / PAUSED / FINISHED: delete room if all players abandoned
+  if (!hasRemainingPlayers) {
+    await repo.deleteRoom(roomCode);
+    return null;
+  }
 
   if (!hasOnlinePlayers && room.status === ROOM_STATUS.PLAYING) {
     room.status = ROOM_STATUS.PAUSED;
@@ -193,7 +199,20 @@ export async function disconnectPlayer(roomCode, playerId) {
   room.updatedAt = Date.now();
   room.stateVersion++;
 
+  const hasRemainingPlayers = room.players.some((p) => !p.abandoned);
   const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
+
+  // In LOBBY: if all players in lobby disconnected, clear the dead room
+  if (room.status === ROOM_STATUS.LOBBY && !hasOnlinePlayers) {
+    await repo.deleteRoom(roomCode);
+    return null;
+  }
+
+  // If no remaining players (all abandoned), delete the room
+  if (!hasRemainingPlayers) {
+    await repo.deleteRoom(roomCode);
+    return null;
+  }
 
   if (!hasOnlinePlayers && room.status === ROOM_STATUS.PLAYING) {
     room.status = ROOM_STATUS.PAUSED;
@@ -264,4 +283,8 @@ export async function deleteRoom(roomCode) {
 
 export async function removeRoomFromLobby(roomCode) {
   await repo.removeOpenRoom(roomCode);
+}
+
+export async function cleanupStaleRoomsOnStartup() {
+  await repo.cleanupStaleRoomsOnStartup();
 }

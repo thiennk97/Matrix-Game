@@ -249,6 +249,7 @@ export function registerSocketHandlers(io) {
         const room = await roomService.leaveRoom(roomCode, playerId);
         if (!room) {
           removeRoomFromMemory(roomCode);
+          io.to(roomCode).emit('kicked_from_room');
         } else {
           loadRoomToMemory(room);
           if (room.status === ROOM_STATUS.PAUSED) {
@@ -562,6 +563,7 @@ export function registerSocketHandlers(io) {
           }
         } else {
           removeRoomFromMemory(session.roomCode);
+          io.to(session.roomCode).emit('kicked_from_room');
         }
         await broadcastLobbyRooms(io);
       }

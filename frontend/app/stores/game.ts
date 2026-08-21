@@ -12,6 +12,7 @@ export const useGameStore = defineStore('game', {
     
     localRoomState: null as RoomState | null,
     timeLeft: 0,
+    turnEndsAt: null as number | null,
     chatMessages: [] as ChatMessage[],
     
     isSpectating: false,
@@ -29,6 +30,7 @@ export const useGameStore = defineStore('game', {
       this.hasJoinedRoom = false;
       this.localRoomState = null;
       this.timeLeft = 0;
+      this.turnEndsAt = null;
       this.chatMessages = [];
       this.isSpectating = false;
       this.spectateFocusedPlayerId = null;

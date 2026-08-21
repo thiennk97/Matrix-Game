@@ -54,15 +54,21 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-
+input, textarea, select {
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 body {
   background-color: var(--bg);
   color: var(--text-main);
   font-family: 'Plus Jakarta Sans', sans-serif;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   background-image: radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.1) 0%, transparent 45%),
@@ -70,6 +76,9 @@ body {
   background-attachment: fixed;
   overflow-x: hidden;
   width: 100%;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 
@@ -345,8 +354,15 @@ header {
 }
 
 @media (max-width: 1180px) {
+  body {
+    background-attachment: scroll;
+  }
+
   header {
     padding: 0.5rem 1rem;
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
   }
   
 
@@ -370,6 +386,9 @@ header {
 @media (max-width: 480px) {
   header {
     padding: 0.45rem 0.75rem;
+    padding-top: max(0.45rem, env(safe-area-inset-top, 0px));
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
   }
   
 

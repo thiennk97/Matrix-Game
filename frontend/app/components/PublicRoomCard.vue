@@ -106,6 +106,10 @@ const isLobby = computed(() => isLobbyStatus(props.room.status))
   font-size: 0.85rem;
   color: var(--text-faint);
   margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
 }
 
 .room-actions {

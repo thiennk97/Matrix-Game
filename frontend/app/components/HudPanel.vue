@@ -1,21 +1,23 @@
 <template>
   <div class="board-timer-bar">
-    <span class="timer-value">{{ store.timeLeft.toFixed(1) }}s</span>
+    <span class="timer-value">{{ displayTime.toFixed(1) }}s</span>
     <div class="timer-bar-container">
       <div 
         class="timer-bar-fill" 
-        :class="{ 'warning': store.timeLeft < 3 }"
-        :style="{ width: timerWidth + '%' }"
+        :class="{ 'warning': displayTime < 3 }"
+        :style="{ transform: `scaleX(${progressRatio})` }"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useGameStore } from '~/stores/game'
+import { isPlayingStatus } from '~/utils/roomStatus'
 
 const store = useGameStore()
+const displayTime = ref(store.timeLeft)
 
 const maxTime = computed(() => {
   return store.localRoomState?.turnTimeLimit 
@@ -23,8 +25,37 @@ const maxTime = computed(() => {
     : 8
 })
 
-const timerWidth = computed(() => {
-  return Math.max(0, Math.min(100, (store.timeLeft / maxTime.value) * 100))
+const progressRatio = computed(() => {
+  return Math.max(0, Math.min(1, displayTime.value / maxTime.value))
+})
+
+let rafId: number | null = null
+
+const updateTimer = () => {
+  if (store.localRoomState && isPlayingStatus(store.localRoomState.status) && store.turnEndsAt) {
+    const diffMs = store.turnEndsAt - Date.now()
+    displayTime.value = Math.max(0, diffMs / 1000)
+  } else {
+    displayTime.value = store.timeLeft
+  }
+  rafId = requestAnimationFrame(updateTimer)
+}
+
+onMounted(() => {
+  rafId = requestAnimationFrame(updateTimer)
+})
+
+onBeforeUnmount(() => {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+})
+
+watch(() => store.timeLeft, (newVal) => {
+  if (!store.turnEndsAt || !isPlayingStatus(store.localRoomState?.status)) {
+    displayTime.value = newVal
+  }
 })
 </script>
 
@@ -44,6 +75,7 @@ const timerWidth = computed(() => {
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  min-width: 48px;
 }
 
 .timer-bar-container {
@@ -57,8 +89,10 @@ const timerWidth = computed(() => {
 .timer-bar-fill {
   height: 6px;
   width: 100%;
+  transform-origin: left center;
+  will-change: transform;
   background: linear-gradient(90deg, var(--matchbox-orange), var(--matchbox-gold));
-  transition: width 0.1s linear, background-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
 .timer-bar-fill.warning {
@@ -74,6 +108,7 @@ const timerWidth = computed(() => {
 
   .timer-value {
     font-size: 1rem;
+    min-width: 40px;
   }
 }
 </style>

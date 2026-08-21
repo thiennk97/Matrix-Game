@@ -33,6 +33,7 @@ function getBaseState(room) {
     turn: room.turn,
     currentPiece: hasCurrentPiece ? room.sharedPieceDeck[room.turn] : null,
     timeLeft: calculateTimeLeft(room),
+    turnEndsAt: room.turnEndsAt || null,
     turnTimeLimit: room.turnTimeLimit,
     stateVersion: room.stateVersion
   };
@@ -70,7 +71,9 @@ function resetTurnPlacementState(room) {
   room.players.forEach((p) => {
     p.hasPlacedThisRound = false;
   });
-  getOrCreateRuntime(room.roomCode).preferredSlots.clear();
+  const runtime = getOrCreateRuntime(room.roomCode);
+  runtime.preferredSlots.clear();
+  runtime.lastEmittedSec = null;
 }
 
 function getOrCreateRuntime(roomCode) {
@@ -79,7 +82,8 @@ function getOrCreateRuntime(roomCode) {
     runtime = {
       timerInterval: null,
       isTransitioning: false,
-      preferredSlots: new Map()
+      preferredSlots: new Map(),
+      lastEmittedSec: null
     };
     roomRuntimes.set(roomCode, runtime);
   }
@@ -97,7 +101,10 @@ function stopTurnInterval(roomCode) {
 function stopTimer(roomCode) {
   const runtime = roomRuntimes.get(roomCode);
   stopTurnInterval(roomCode);
-  if (runtime) runtime.isTransitioning = false;
+  if (runtime) {
+    runtime.isTransitioning = false;
+    runtime.lastEmittedSec = null;
+  }
 }
 
 export async function pauseRoom(io, roomCode) {
@@ -135,6 +142,7 @@ export async function resumeRoomTimer(io, roomCode) {
   emitRoomState(io, room);
 
   const runtime = getOrCreateRuntime(roomCode);
+  runtime.lastEmittedSec = null;
   runtime.timerInterval = setInterval(() => { tickTurnTimer(io, roomCode).catch(console.error); }, 100);
 }
 
@@ -154,6 +162,7 @@ export async function startServerTurnTimer(io, roomCode) {
   emitRoomState(io, room);
 
   const runtime = getOrCreateRuntime(roomCode);
+  runtime.lastEmittedSec = null;
   runtime.timerInterval = setInterval(() => { tickTurnTimer(io, roomCode).catch(console.error); }, 100);
 }
 
@@ -169,7 +178,12 @@ async function tickTurnTimer(io, roomCode) {
   if (timeLeft <= 0) {
     await finishCurrentTurn(io, roomCode);
   } else {
-    io.to(roomCode).emit('timer_tick', { timeLeft });
+    const runtime = getOrCreateRuntime(roomCode);
+    const floorSec = Math.floor(timeLeft);
+    if (runtime.lastEmittedSec !== floorSec) {
+      runtime.lastEmittedSec = floorSec;
+      io.to(roomCode).emit('timer_tick', { timeLeft, turnEndsAt: room.turnEndsAt });
+    }
   }
 }
 
@@ -234,20 +248,6 @@ async function endGame(io, roomCode, room) {
   await broadcastLobbyRooms(io);
 }
 
-async function advanceNextTurnServer(io, roomCode) {
-  const room = rooms.get(roomCode);
-  if (!room) return;
-
-  resetTurnPlacementState(room);
-  room.turn++;
-
-  if (room.turn < TOTAL_SLOTS) {
-    await startServerTurnTimer(io, roomCode);
-  } else {
-    await endGame(io, roomCode, room);
-  }
-}
-
 export async function finishCurrentTurn(io, roomCode) {
   const room = rooms.get(roomCode);
   if (!room || room.status !== ROOM_STATUS.PLAYING) return;
@@ -259,12 +259,24 @@ export async function finishCurrentTurn(io, roomCode) {
   stopTurnInterval(roomCode);
   try {
     autoPlaceMissingMoves(room);
-    room.turnEndsAt = null;
-    room.stateVersion++;
-    await saveRoom(room);
-    emitRoomState(io, room);
 
-    await advanceNextTurnServer(io, roomCode);
+    room.turn++;
+    if (room.turn < TOTAL_SLOTS) {
+      room.turnEndsAt = Date.now() + room.turnTimeLimit * 1000;
+      room.remainingTurnMs = null;
+      room.stateVersion++;
+      resetTurnPlacementState(room);
+
+      await saveRoom(room);
+      emitRoomState(io, room);
+
+      runtime.lastEmittedSec = null;
+      runtime.timerInterval = setInterval(() => {
+        tickTurnTimer(io, roomCode).catch(console.error);
+      }, 100);
+    } else {
+      await endGame(io, roomCode, room);
+    }
   } finally {
     runtime.isTransitioning = false;
   }

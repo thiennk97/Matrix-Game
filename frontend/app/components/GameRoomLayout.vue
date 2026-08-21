@@ -20,10 +20,9 @@
       </aside>
 
       <div class="game-area">
-        <div class="panel-section board-card">
-          <div class="board-main">
-            <LobbyView v-if="isLobby" />
-
+        <div class="panel-section board-card" :class="{ 'is-lobby-mode': isLobby }">
+          <LobbyView v-if="isLobby" />
+          <div v-else class="board-main">
             <div v-if="isPaused" class="game-pause-overlay">
               <h2><LucidePauseCircle class="icon" /> TRẬN ĐẤU BỊ TẠM DỪNG</h2>
               <p>Đang chờ người chơi kết nối lại...</p>
@@ -137,6 +136,13 @@ const victoryPlayers = computed(() => {
   justify-content: center;
   gap: var(--space-5);
   padding: var(--space-5);
+  width: 100%;
+}
+
+.panel-section.board-card.is-lobby-mode {
+  padding: var(--space-4);
+  max-width: 580px;
+  margin: 0 auto;
 }
 
 .board-main {
@@ -184,6 +190,22 @@ const victoryPlayers = computed(() => {
   gap: var(--space-2);
 }
 
+.game-pause-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 17, 32, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  gap: var(--space-4);
+  text-align: center;
+  padding: var(--space-4);
+}
+
 .game-pause-overlay h2 {
   color: var(--matchbox-red);
   font-family: 'Orbitron', sans-serif;
@@ -218,7 +240,11 @@ const victoryPlayers = computed(() => {
   }
 
   .board-main {
+    grid-template-columns: 1fr auto;
     column-gap: var(--space-3);
+    row-gap: var(--space-3);
+    max-width: 520px;
+    margin: 0 auto;
     min-width: 0;
   }
 
@@ -235,8 +261,12 @@ const victoryPlayers = computed(() => {
     align-items: center;
     padding: 0.75rem;
     min-width: 0;
-    overflow: hidden;
     width: 100%;
+  }
+
+  .panel-section.board-card.is-lobby-mode {
+    padding: 0.75rem;
+    max-width: 100%;
   }
 }
 

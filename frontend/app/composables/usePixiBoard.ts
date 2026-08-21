@@ -83,7 +83,7 @@ export function usePixiBoard(
   containerRef: { value: HTMLDivElement | null },
 ) {
   const store = useGameStore()
-  const { emitAck } = useSocket()
+  const { emit, emitAck } = useSocket()
 
   let pixiApp: PIXI.Application | null = null
   let pixiGridContainer: PIXI.Container
@@ -91,6 +91,9 @@ export function usePixiBoard(
   let pixiMatchGraphics: PIXI.Graphics
   let hoverOverlay: HoverOverlay | null = null
   let unmounted = false
+  let cachedCanvasRect: DOMRect | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let onWindowResize: (() => void) | null = null
 
   let lastHoveredR = -1
   let lastHoveredC = -1
@@ -281,7 +284,7 @@ export function usePixiBoard(
       && preferredAutoPlaceSlotIdx === slotIdx) return
     preferredAutoPlaceTurn = state.turn
     preferredAutoPlaceSlotIdx = slotIdx
-    emitAck('set_preferred_slot', {
+    emit('set_preferred_slot', {
       turn: state.turn, slotIdx,
     })
   }
@@ -658,9 +661,32 @@ export function usePixiBoard(
   }
 
   function attachPointerTracking(canvas: HTMLCanvasElement) {
-    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+    const updateCanvasRect = () => {
+      if (canvas) {
+        cachedCanvasRect = canvas.getBoundingClientRect()
+      }
+    }
+
+    updateCanvasRect()
+
+    onWindowResize = () => updateCanvasRect()
+    window.addEventListener('resize', onWindowResize, { passive: true })
+    window.addEventListener('scroll', onWindowResize, { passive: true })
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateCanvasRect())
+      resizeObserver.observe(canvas)
+    }
+
+    canvas.addEventListener('pointerenter', () => {
+      updateCanvasRect()
+    }, { passive: true })
+
+    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      updateCanvasRect()
       if (!hoverOverlay || !pixiApp) return
-      const rect = canvas.getBoundingClientRect()
+      const rect = cachedCanvasRect || canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
       hoverOverlay.pointerX = (
         (e.clientX - rect.left) / rect.width
       ) * BOARD_SIZE
@@ -670,6 +696,33 @@ export function usePixiBoard(
       hoverOverlay.hasPointerPosition = true
       updateHoverPointerTarget()
     }, { passive: true })
+
+    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!hoverOverlay || !pixiApp) return
+      const rect = cachedCanvasRect || canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
+      hoverOverlay.pointerX = (
+        (e.clientX - rect.left) / rect.width
+      ) * BOARD_SIZE
+      hoverOverlay.pointerY = (
+        (e.clientY - rect.top) / rect.height
+      ) * BOARD_SIZE
+      hoverOverlay.hasPointerPosition = true
+      updateHoverPointerTarget()
+    }, { passive: true })
+
+    canvas.addEventListener('pointerup', () => {
+      if (!hoverOverlay) return
+      hoverOverlay.hasPointerPosition = false
+    }, { passive: true })
+
+    canvas.addEventListener('pointercancel', () => {
+      handleMatrixPointerLeave()
+      if (!hoverOverlay) return
+      hoverOverlay.hasPointerPosition = false
+      hoverOverlay.targetAlpha = 0
+    }, { passive: true })
+
     canvas.addEventListener('pointerleave', () => {
       handleMatrixPointerLeave()
       if (!hoverOverlay) return
@@ -754,6 +807,7 @@ export function usePixiBoard(
     canvas.style.width = '100%'
     canvas.style.height = '100%'
     canvas.style.display = 'block'
+    canvas.style.touchAction = 'none'
     containerRef.value.appendChild(canvas)
 
     const gridBg = new PIXI.Graphics()
@@ -788,6 +842,17 @@ export function usePixiBoard(
 
   function destroyBoard() {
     unmounted = true
+    if (onWindowResize) {
+      window.removeEventListener('resize', onWindowResize)
+      window.removeEventListener('scroll', onWindowResize)
+      onWindowResize = null
+    }
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    cachedCanvasRect = null
+
     if (pixiApp) {
       pixiApp.destroy(true, { children: true })
       pixiApp = null
