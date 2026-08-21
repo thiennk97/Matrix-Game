@@ -47,6 +47,10 @@ watch(
   () => store.spectateFocusedPlayerId,
   renderBoard,
 )
+watch(
+  () => store.isTurnLocked,
+  renderBoard,
+)
 </script>
 
 <style scoped>
@@ -58,6 +62,10 @@ watch(
   position: relative;
   border-radius: var(--radius-sm);
   overflow: hidden;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 @media (max-width: 1180px) {
@@ -67,6 +75,7 @@ watch(
     max-width: 467px;
     height: auto;
     aspect-ratio: 1 / 1;
+    touch-action: none;
   }
 }
 </style>

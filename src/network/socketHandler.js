@@ -38,6 +38,32 @@ function resolveTurnTimeLimit(turnTimeLimit) {
   return ALLOWED_TURN_TIMES.includes(parsed) ? parsed : 8;
 }
 
+function isDisallowedName(rawName) {
+  if (!rawName || typeof rawName !== 'string') return false;
+  const normalized = rawName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[0]/g, 'o')
+    .replace(/[1!|]/g, 'i')
+    .replace(/[3]/g, 'e')
+    .replace(/[4@]/g, 'a');
+
+  const compact = normalized.replace(/[^a-z]/g, '');
+
+  const bannedPatterns = [
+    /thien(lon|lol|loz|lozz|l0n)(?!g)/,
+    /(lon|lol|loz|lozz|l0n)thien/,
+    /thonlien|lienthon/,
+    /thonlieu|lieuthon/,
+    /thien(cac|buoi|cho|dog|occho|ngu|dbrr|sucvat)/,
+    /(cac|buoi|cho|dog|occho|ngu|dbrr|sucvat)thien/
+  ];
+
+  return bannedPatterns.some((pattern) => pattern.test(compact));
+}
+
 function requirePlayerName(playerName) {
   if (typeof playerName !== 'string') {
     const error = new Error('Tên người chơi là bắt buộc.');
@@ -48,6 +74,12 @@ function requirePlayerName(playerName) {
   const normalizedName = playerName.trim();
   if (!normalizedName || normalizedName.length > MAX_PLAYER_NAME_LENGTH) {
     const error = new Error(`Tên người chơi phải có từ 1 đến ${MAX_PLAYER_NAME_LENGTH} ký tự.`);
+    error.code = 'INVALID_PLAYER_NAME';
+    throw error;
+  }
+
+  if (isDisallowedName(normalizedName)) {
+    const error = new Error('Tên không hợp lệ! Vui lòng đặt tên lịch sự hơn nhé.');
     error.code = 'INVALID_PLAYER_NAME';
     throw error;
   }
@@ -249,6 +281,7 @@ export function registerSocketHandlers(io) {
         const room = await roomService.leaveRoom(roomCode, playerId);
         if (!room) {
           removeRoomFromMemory(roomCode);
+          io.to(roomCode).emit('kicked_from_room');
         } else {
           loadRoomToMemory(room);
           if (room.status === ROOM_STATUS.PAUSED) {
@@ -441,11 +474,18 @@ export function registerSocketHandlers(io) {
 
         room.stateVersion++;
 
-        await roomService.saveRoom(room);
-        emitRoomState(io, room);
+        const activePlayers = room.players.filter((p) => p.connected && !p.abandoned);
+        const allPlaced = activePlayers.length > 0 && activePlayers.every((p) => p.hasPlacedThisRound);
 
+        if (!allPlaced) {
+          emitRoomState(io, room);
+        }
         if (typeof ack === 'function') ack({ ok: true });
-        await advanceIfAllPlaced(io, room, room.roomCode);
+        roomService.saveRoom(room).catch(console.error);
+
+        if (allPlaced) {
+          await finishCurrentTurn(io, room.roomCode);
+        }
       } catch (err) {
         if (typeof ack === 'function') ack({ ok: false, error: { message: err.message } });
       }
@@ -562,6 +602,7 @@ export function registerSocketHandlers(io) {
           }
         } else {
           removeRoomFromMemory(session.roomCode);
+          io.to(session.roomCode).emit('kicked_from_room');
         }
         await broadcastLobbyRooms(io);
       }

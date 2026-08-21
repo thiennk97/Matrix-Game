@@ -11,11 +11,13 @@ interface AckResponse {
   error?: { message: string }
 }
 
-const VICTORY_MODAL_DELAY_MS = 1000
+const VICTORY_MODAL_DELAY_MS = 500
+const TURN_LOCK_DURATION_MS = 500
 const RESULT_SNAPSHOT_PREFIX = 'matrix-game-result:'
 
 let socket: Socket | null = null
 let victoryModalTimer: ReturnType<typeof setTimeout> | null = null
+let turnLockTimer: ReturnType<typeof setTimeout> | null = null
 
 function saveResultSnapshot(roomCode: string, players: RoomState['players']) {
   try {
@@ -42,6 +44,10 @@ function resetSession() {
     clearTimeout(victoryModalTimer)
     victoryModalTimer = null
   }
+  if (turnLockTimer) {
+    clearTimeout(turnLockTimer)
+    turnLockTimer = null
+  }
   useGameStore().resetState()
 }
 
@@ -52,15 +58,48 @@ function applyRoomState(state: RoomState) {
   const current = store.localRoomState
   if (current && state.stateVersion < current.stateVersion) return
 
+  // Preserve optimistic move if incoming server state is from the same turn but hasn't registered our move yet
+  if (current && state.turn === current.turn && store.myPlayerId && !store.isSpectating) {
+    const currentMyPlayer = current.players?.find((p) => p.id === store.myPlayerId)
+    const incomingMyPlayer = state.players?.find((p) => p.id === store.myPlayerId)
+    if (currentMyPlayer?.hasPlacedThisRound && incomingMyPlayer && !incomingMyPlayer.hasPlacedThisRound) {
+      incomingMyPlayer.hasPlacedThisRound = true
+      incomingMyPlayer.board = currentMyPlayer.board
+      incomingMyPlayer.score = currentMyPlayer.score
+      incomingMyPlayer.matchedLines = currentMyPlayer.matchedLines
+    }
+  }
+
   const isFirstState = !current
   const wasFinished = isFinishedStatus(current?.status)
   const nowFinished = isFinishedStatus(state.status)
 
   if (state.turn !== store.currentTurn) {
+    if (isPlayingStatus(state.status) && store.currentTurn !== -1) {
+      store.isTurnLocked = true
+      if (turnLockTimer) clearTimeout(turnLockTimer)
+      turnLockTimer = setTimeout(() => {
+        store.isTurnLocked = false
+        turnLockTimer = null
+      }, TURN_LOCK_DURATION_MS)
+    } else {
+      store.isTurnLocked = false
+      if (turnLockTimer) {
+        clearTimeout(turnLockTimer)
+        turnLockTimer = null
+      }
+    }
     store.currentTurn = state.turn
+  } else if (!isPlayingStatus(state.status)) {
+    store.isTurnLocked = false
+    if (turnLockTimer) {
+      clearTimeout(turnLockTimer)
+      turnLockTimer = null
+    }
   }
   store.localRoomState = state
   store.timeLeft = state.timeLeft
+  store.turnEndsAt = state.turnEndsAt || null
 
   if (nowFinished && !wasFinished) {
     if (victoryModalTimer) clearTimeout(victoryModalTimer)
@@ -89,8 +128,11 @@ export const useSocket = () => {
 
     socket.on('room_state_update', applyRoomState)
 
-    socket.on('timer_tick', ({ timeLeft }: { timeLeft: number }) => {
+    socket.on('timer_tick', ({ timeLeft, turnEndsAt }: { timeLeft: number; turnEndsAt?: number | null }) => {
       store.timeLeft = timeLeft
+      if (turnEndsAt !== undefined) {
+        store.turnEndsAt = turnEndsAt
+      }
     })
 
     socket.on('chat_message', (msg: ChatMessage) => {
@@ -127,6 +169,10 @@ export const useSocket = () => {
     }
   }
 
+  const emit = (event: string, payload: unknown = {}) => {
+    socket?.emit(event, payload)
+  }
+
   const emitAck = (event: string, payload: unknown = {}): Promise<AckResponse> => {
     return new Promise((resolve) => {
       socket?.emit(event, payload, (res: AckResponse) => resolve(res))
@@ -136,6 +182,7 @@ export const useSocket = () => {
   return {
     socket,
     connect,
+    emit,
     emitAck,
     applyRoomState,
     resetSession,

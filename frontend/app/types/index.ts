@@ -24,6 +24,7 @@ export interface RoomState {
   hostPlayerId: string
   currentPiece: number[] | null
   timeLeft: number
+  turnEndsAt?: number | null
   turnTimeLimit: number
 }
 

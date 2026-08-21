@@ -160,7 +160,8 @@ watch(() => store.chatMessages.length, () => {
   color: #fff;
   padding: 8px 12px;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 1rem;
+  -webkit-appearance: none;
 }
 
 .chat-input-row input:focus {
@@ -180,6 +181,8 @@ watch(() => store.chatMessages.length, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
+  min-height: 40px;
 }
 
 .chat-input-row button:hover {
@@ -201,14 +204,24 @@ watch(() => store.chatMessages.length, () => {
   }
 
   .chat-body {
-    height: 220px;
+    height: 200px;
   }
 }
 
 @media (min-width: 769px) and (max-width: 1180px) {
 
   .chat-body {
-    height: 280px;
+    height: 260px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-body {
+    height: 180px;
+  }
+
+  .chat-input-row {
+    padding: var(--space-2);
   }
 }
 </style>

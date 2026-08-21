@@ -10,6 +10,7 @@ import {
   lerpColorHex,
 } from '~/config/constants'
 import { isPlayingStatus } from '~/utils/roomStatus'
+import { calculateScoreIncremental } from '~/utils/gameScoring'
 
 interface CellData {
   cellGroup: PIXI.Container
@@ -83,7 +84,7 @@ export function usePixiBoard(
   containerRef: { value: HTMLDivElement | null },
 ) {
   const store = useGameStore()
-  const { emitAck } = useSocket()
+  const { emit, emitAck, applyRoomState } = useSocket()
 
   let pixiApp: PIXI.Application | null = null
   let pixiGridContainer: PIXI.Container
@@ -91,6 +92,9 @@ export function usePixiBoard(
   let pixiMatchGraphics: PIXI.Graphics
   let hoverOverlay: HoverOverlay | null = null
   let unmounted = false
+  let cachedCanvasRect: DOMRect | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let onWindowResize: (() => void) | null = null
 
   let lastHoveredR = -1
   let lastHoveredC = -1
@@ -165,7 +169,7 @@ export function usePixiBoard(
   }
 
   function handleCellClick(r: number, c: number) {
-    if (store.isSpectating) return
+    if (store.isSpectating || store.isTurnLocked) return
     const roomState = store.localRoomState
     if (!roomState || !isPlayingStatus(roomState.status)) return
 
@@ -185,20 +189,50 @@ export function usePixiBoard(
     if (!pieceValues) return
 
     const turn = roomState.turn
+    const previousScore = myPlayer.score
+    const previousMatchedLines = myPlayer.matchedLines ? [...myPlayer.matchedLines] : []
+
+    clearHoverTimeout()
+    lastHoveredR = -1
+    lastHoveredC = -1
+    if (hoverOverlay) {
+      hoverOverlay.targetAlpha = 0
+      hoverOverlay.alpha = 0
+      hoverOverlay.visible = false
+      hoverOverlay.lastSlotKey = null
+      hoverOverlay.hasPointerPosition = false
+    }
 
     coords.forEach((coord, idx) => {
       myBoard[coord.r]![coord.c] = pieceValues[idx] ?? null
     })
     myPlayer.hasPlacedThisRound = true
+
+    // Optimistically compute match lines and total score immediately
+    const { totalScore, matchLines } = calculateScoreIncremental(
+      myBoard,
+      coords,
+      previousMatchedLines,
+    )
+    myPlayer.score = totalScore
+    myPlayer.matchedLines = matchLines
+
     renderBoard()
 
     emitAck('make_move', { turn, slotIdx }).then((res) => {
       if (res.ok) return
-      if (store.localRoomState?.turn !== turn) return
+      if (res.error?.code === 'STALE_TURN' || store.localRoomState?.turn !== turn) {
+        if (res.error?.state) {
+          applyRoomState(res.error.state as any)
+        }
+        return
+      }
       coords.forEach((coord) => {
         myBoard[coord.r]![coord.c] = null
       })
       myPlayer.hasPlacedThisRound = false
+      myPlayer.score = previousScore
+      myPlayer.matchedLines = previousMatchedLines
       renderBoard()
     })
   }
@@ -281,7 +315,7 @@ export function usePixiBoard(
       && preferredAutoPlaceSlotIdx === slotIdx) return
     preferredAutoPlaceTurn = state.turn
     preferredAutoPlaceSlotIdx = slotIdx
-    emitAck('set_preferred_slot', {
+    emit('set_preferred_slot', {
       turn: state.turn, slotIdx,
     })
   }
@@ -323,6 +357,8 @@ export function usePixiBoard(
     const state = store.localRoomState
     if (!hoverInfo || !state) {
       hoverOverlay.targetAlpha = 0
+      hoverOverlay.alpha = 0
+      hoverOverlay.visible = false
       hoverOverlay.lastSlotKey = null
       return
     }
@@ -658,9 +694,32 @@ export function usePixiBoard(
   }
 
   function attachPointerTracking(canvas: HTMLCanvasElement) {
-    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+    const updateCanvasRect = () => {
+      if (canvas) {
+        cachedCanvasRect = canvas.getBoundingClientRect()
+      }
+    }
+
+    updateCanvasRect()
+
+    onWindowResize = () => updateCanvasRect()
+    window.addEventListener('resize', onWindowResize, { passive: true })
+    window.addEventListener('scroll', onWindowResize, { passive: true })
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateCanvasRect())
+      resizeObserver.observe(canvas)
+    }
+
+    canvas.addEventListener('pointerenter', () => {
+      updateCanvasRect()
+    }, { passive: true })
+
+    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      updateCanvasRect()
       if (!hoverOverlay || !pixiApp) return
-      const rect = canvas.getBoundingClientRect()
+      const rect = cachedCanvasRect || canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
       hoverOverlay.pointerX = (
         (e.clientX - rect.left) / rect.width
       ) * BOARD_SIZE
@@ -670,6 +729,33 @@ export function usePixiBoard(
       hoverOverlay.hasPointerPosition = true
       updateHoverPointerTarget()
     }, { passive: true })
+
+    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!hoverOverlay || !pixiApp) return
+      const rect = cachedCanvasRect || canvas.getBoundingClientRect()
+      if (!rect.width || !rect.height) return
+      hoverOverlay.pointerX = (
+        (e.clientX - rect.left) / rect.width
+      ) * BOARD_SIZE
+      hoverOverlay.pointerY = (
+        (e.clientY - rect.top) / rect.height
+      ) * BOARD_SIZE
+      hoverOverlay.hasPointerPosition = true
+      updateHoverPointerTarget()
+    }, { passive: true })
+
+    canvas.addEventListener('pointerup', () => {
+      if (!hoverOverlay) return
+      hoverOverlay.hasPointerPosition = false
+    }, { passive: true })
+
+    canvas.addEventListener('pointercancel', () => {
+      handleMatrixPointerLeave()
+      if (!hoverOverlay) return
+      hoverOverlay.hasPointerPosition = false
+      hoverOverlay.targetAlpha = 0
+    }, { passive: true })
+
     canvas.addEventListener('pointerleave', () => {
       handleMatrixPointerLeave()
       if (!hoverOverlay) return
@@ -754,6 +840,7 @@ export function usePixiBoard(
     canvas.style.width = '100%'
     canvas.style.height = '100%'
     canvas.style.display = 'block'
+    canvas.style.touchAction = 'none'
     containerRef.value.appendChild(canvas)
 
     const gridBg = new PIXI.Graphics()
@@ -788,6 +875,17 @@ export function usePixiBoard(
 
   function destroyBoard() {
     unmounted = true
+    if (onWindowResize) {
+      window.removeEventListener('resize', onWindowResize)
+      window.removeEventListener('scroll', onWindowResize)
+      onWindowResize = null
+    }
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+    cachedCanvasRect = null
+
     if (pixiApp) {
       pixiApp.destroy(true, { children: true })
       pixiApp = null
@@ -869,7 +967,7 @@ export function usePixiBoard(
 
     const isPlaying = isPlayingStatus(store.localRoomState.status)
       && !store.isSpectating
-    const isLocked = !isPlaying || myHasPlaced
+    const isLocked = !isPlaying || myHasPlaced || store.isTurnLocked
     pixiGridContainer.interactiveChildren = isPlaying
     pixiGridContainer.cursor = isLocked ? 'not-allowed' : 'default'
 

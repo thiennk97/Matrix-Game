@@ -6,7 +6,7 @@
           v-for="(val, idx) in currentPiece" 
           :key="idx"
           class="piece-box"
-          :class="'num-' + val"
+          :class="['num-' + val, { 'piece-box-locked': store.isTurnLocked }]"
           :style="{ background: playerColorStr }"
         >
           {{ val }}
@@ -89,5 +89,11 @@ const playerColorStr = computed(() => {
   font-size: calc(var(--board-cell-size, 50px) * 0.56);
   font-weight: 600;
   color: #1a1a1a;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.piece-box-locked {
+  opacity: 0.65;
+  transform: scale(0.96);
 }
 </style>

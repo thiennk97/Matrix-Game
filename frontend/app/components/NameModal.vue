@@ -44,10 +44,42 @@ onMounted(() => {
   inputRef.value?.focus()
 })
 
+function isDisallowedName(rawName: string): boolean {
+  if (!rawName) return false
+  const normalized = rawName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[0]/g, 'o')
+    .replace(/[1!|]/g, 'i')
+    .replace(/[3]/g, 'e')
+    .replace(/[4@]/g, 'a')
+
+  const compact = normalized.replace(/[^a-z]/g, '')
+
+  const bannedPatterns = [
+    /thien(lon|lol|loz|lozz|l0n)(?!g)/,
+    /(lon|lol|loz|lozz|l0n)thien/,
+    /thonlien|lienthon/,
+    /thonlieu|lieuthon/,
+    /thien(cac|buoi|cho|dog|occho|ngu|dbrr|sucvat)/,
+    /(cac|buoi|cho|dog|occho|ngu|dbrr|sucvat)thien/,
+  ]
+
+  return bannedPatterns.some((pattern) => pattern.test(compact))
+}
+
 const submit = () => {
-  if (!name.value.trim()) return
-  localStorage.setItem('matrix-game-player-name', name.value.trim())
-  emit('submit', name.value.trim(), props.isCreate)
+  const trimmed = name.value.trim()
+  if (!trimmed) return
+  if (isDisallowedName(trimmed)) {
+    alert('Tên không hợp lệ! Vui lòng tôn trọng anh Thiên.')
+    inputRef.value?.focus()
+    return
+  }
+  localStorage.setItem('matrix-game-player-name', trimmed)
+  emit('submit', trimmed, props.isCreate)
 }
 </script>
 
