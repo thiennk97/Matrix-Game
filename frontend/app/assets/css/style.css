@@ -173,12 +173,6 @@ header {
 
 
 
-.match-list-empty {
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  text-align: center;
-  padding: var(--space-3);
-}
 
 
 
@@ -380,4 +374,14 @@ header {
   .logo-svg {
     max-width: 270px;
   }
+}
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
 }

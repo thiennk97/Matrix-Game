@@ -11,7 +11,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     const route = useRoute()
     if (route.path !== '/') navigateTo({ path: '/', query: route.query })
     const roomsRes = await emitAck('list_rooms', {})
-    if (roomsRes?.ok) {
+    if (roomsRes.ok) {
       store.publicRooms = roomsRes.data.rooms
     }
   }
@@ -26,7 +26,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (session?.roomCode && session.isSpectating) {
         const res = await emitAck('spectate_room', { roomCode: session.roomCode })
 
-        if (res?.ok) {
+        if (res.ok) {
           store.myPlayerIndex = -1
           store.myPlayerId = null
           store.currentRoomCode = session.roomCode
@@ -45,7 +45,7 @@ export default defineNuxtPlugin((nuxtApp) => {
           playerId: session.playerId
         })
 
-        if (res?.ok) {
+        if (res.ok) {
           const { roomCode, playerId, playerIndex, state } = res.data
           store.myPlayerIndex = playerIndex
           store.myPlayerId = playerId

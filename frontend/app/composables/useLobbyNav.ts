@@ -9,7 +9,7 @@ export function useLobbyNav() {
 
   const refreshRoomList = async () => {
     const res = await emitAck('list_rooms', {})
-    if (res?.ok) store.publicRooms = res.data.rooms
+    if (res.ok) store.publicRooms = res.data.rooms
   }
 
   const goToIndex = async () => {
@@ -18,10 +18,12 @@ export function useLobbyNav() {
   }
 
   const leaveAndGoToIndex = async () => {
-    if (store.currentRoomCode) clearResultSnapshot(store.currentRoomCode)
+    const roomCode = store.currentRoomCode
+    await router.push('/')
+    if (roomCode) clearResultSnapshot(roomCode)
     resetSession()
     localStorage.removeItem('matrix-game-session')
-    await goToIndex()
+    await refreshRoomList()
   }
 
   return { goToIndex, leaveAndGoToIndex, refreshRoomList }

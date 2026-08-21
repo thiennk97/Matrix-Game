@@ -6,7 +6,7 @@
       </div>
     </header>
 
-    <NuxtPage v-if="!store.isRestoring" />
+    <NuxtPage v-if="!store.isRestoring" :transition="{ name: 'page', mode: 'out-in' }" />
     <div v-else class="restoring-msg" />
   </div>
 </template>

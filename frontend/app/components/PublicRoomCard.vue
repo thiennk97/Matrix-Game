@@ -2,11 +2,11 @@
   <div class="public-room-card">
     <div class="room-info">
       <div class="room-name">Phòng: <strong>{{ room.roomCode }}</strong></div>
-      <div 
-        class="room-status" 
-        :class="{'playing': room.status === 'PLAYING', 'lobby': room.status === 'LOBBY'}"
+      <div
+        class="room-status"
+        :class="{ playing: !isLobby, lobby: isLobby }"
       >
-        {{ room.status === 'LOBBY' ? 'Đang chờ' : 'Đang chơi' }}
+        {{ isLobby ? 'Đang chờ' : 'Đang chơi' }}
       </div>
     </div>
     <div class="room-players">
@@ -14,8 +14,8 @@
       <div class="room-card-host">Host: {{ room.hostName }}</div>
     </div>
     <div class="room-actions">
-      <button 
-        v-if="room.status === 'LOBBY'" 
+      <button
+        v-if="isLobby"
         class="btn btn-sm btn-green"
         @click="$emit('join', room.roomCode)"
       >
@@ -29,19 +29,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { LucideUsers, LucideEye, LucideLogIn } from '@lucide/vue'
+import { isLobbyStatus } from '~/utils/roomStatus'
+import type { PublicRoom } from '~/types'
 
-defineProps<{
-  room: {
-    roomCode: string
-    status: string
-    playerCount: number
-    maxPlayers: number
-    hostName: string
-  }
+const props = defineProps<{
+  room: PublicRoom
 }>()
 
 defineEmits(['join', 'spectate'])
+
+const isLobby = computed(() => isLobbyStatus(props.room.status))
 </script>
 
 <style scoped>

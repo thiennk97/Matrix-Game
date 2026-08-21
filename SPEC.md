@@ -75,6 +75,14 @@ Server lưu lựa chọn này trong runtime memory, tách khỏi room state và 
 
 Vì timer và bước kiểm tra cuối cùng nằm ở server, reload, network lag hoặc client bị sửa không thể tạo ra một nước đi không hợp lệ.
 
+### Render lạc quan (optimistic) khi đặt quân
+
+`usePixiBoard.ts`'s `handleCellClick` viết trực tiếp giá trị combo vào `store.localRoomState.players[myIdx].board` và set `hasPlacedThisRound = true` NGAY khi click — trước khi có phản hồi từ `make_move` — rồi mới gọi `renderBoard()`. Mục đích: ẩn hoàn toàn round-trip latency (đặc biệt khi mạng/Redis production chậm hơn localhost), vì trước đây UI chỉ cập nhật sau khi `room_state_update` quay lại, khiến việc đặt quân "có cảm giác delay" trên môi trường có latency thật.
+
+- An toàn vì server vẫn là nguồn sự thật tuyệt đối: state đoán trước sẽ bị `room_state_update` thật ghi đè hoàn toàn (`applyRoomState` gán lại `store.localRoomState` từ đầu), nên không có nguy cơ desync vĩnh viễn.
+- Chỉ đoán trước vị trí/giá trị quân đặt (đã được validate y hệt điều kiện server sẽ kiểm — slot trống, đúng lượt, chưa đặt) — KHÔNG đoán trước điểm số hay `matchedLines`, vì logic tính điểm (quét run theo hàng/cột/chéo) chỉ tồn tại ở server; điểm số và animation "twang" nối các run khớp vẫn chờ xác nhận thật.
+- Nếu `make_move` trả về lỗi (hiếm, vì đã validate y hệt ở client trước khi optimistic-update — chỉ xảy ra khi có race, ví dụ lượt đã đổi giữa lúc gửi request), client revert lại đúng các ô đã optimistic-set về `null` — nhưng CHỈ khi `store.localRoomState.turn` vẫn còn là turn lúc gửi request (nếu lượt đã đổi, nghĩa là state thật mới hơn đã ghi đè rồi, revert theo dữ liệu cũ sẽ sai nên bỏ qua).
+
 ## 4. Trạng thái phòng
 
 | Trạng thái | Ý nghĩa                                                  |
@@ -228,7 +236,7 @@ State dùng chung qua Pinia store (`stores/game.ts`); giao tiếp socket qua com
 
 ### Khôi phục session khi reload
 
-1. Plugin `session-restore.client.ts` chạy trước khi route hiển thị, đọc `matrix-game-session` từ localStorage.
+1. Plugin `session.client.ts` chạy trước khi route hiển thị, đọc `matrix-game-session` từ localStorage.
 2. Có session player → `resume_room`; có session spectator → `spectate_room`; không có/hỏng → về index (giữ nguyên query hiện tại, không xoá `?room=` nếu đang ở `/`).
 3. Nếu phòng đã hết hạn hoặc không hợp lệ, session bị xoá.
 
@@ -245,11 +253,21 @@ State dùng chung qua Pinia store (`stores/game.ts`); giao tiếp socket qua com
   - Đóng modal bằng nút "X" không xoá snapshot — chỉ ẩn tạm để xem board, reload lại sẽ hiện lại modal kết quả (coi như một thao tác "peek", không phải rời màn hình).
   - Cơ chế này lưu ở localStorage nên chỉ theo từng trình duyệt/thiết bị, không đồng bộ nếu một người chơi dùng nhiều thiết bị cho cùng một `playerId`.
 
+### `RoomStatus` — kiểm tra trạng thái phòng thống nhất qua TypeScript
+
+Trước đây mỗi file tự so sánh chuỗi `=== 'LOBBY'`/`!== 'PLAYING'`/... rải rác, dễ lệch nhau khi thêm trạng thái mới hoặc gõ sai chuỗi. Nay quy về:
+
+- `types/index.ts` export type `RoomStatus = 'LOBBY' | 'PLAYING' | 'PAUSED' | 'FINISHED'`, dùng lại cho cả `RoomState.status` và `PublicRoom.status` (qua `Extract<RoomStatus, 'LOBBY' | 'PLAYING'>`).
+- `utils/roomStatus.ts` export các predicate thuần (`isLobbyStatus`, `isPlayingStatus`, `isPausedStatus`, `isFinishedStatus`) nhận `RoomStatus | undefined | null` — dùng ở những nơi KHÔNG cần reactivity (ví dụ trong `usePixiBoard.ts`, so sánh một `state.status` cụ thể tại một thời điểm, hoặc `applyRoomState` so sánh state cũ/mới).
+- `composables/useRoomStatus.ts` bọc các predicate trên thành computed ref (`isLobby`, `isPlaying`, `isPaused`, `isFinished`) đọc trực tiếp từ `store.localRoomState?.status` — dùng trong template của `GameRoomLayout.vue`, `pages/room/[code].vue`. Nhờ vậy `GameRoomLayout.vue` không cần nhận `roomStatus` như một prop nữa (nó đã có `useGameStore()` sẵn), giảm một tầng truyền dữ liệu trùng lặp từ cả hai page cha.
+
 ### Các điểm khác
 
 - Lobby (`LobbyView.vue`) hiển thị icon vương miện cạnh tên host để phân biệt trực quan, không chỉ dựa vào vị trí slot.
 - Leaderboard không dùng text "(BẠN)" để đánh dấu người chơi hiện tại — thay bằng border-left và box-shadow màu cam trên chính hàng đó (`LeaderboardItem.vue`), tách biệt với style riêng của hàng #1 (leader).
+- Danh sách leaderboard bọc trong `<TransitionGroup name="rank">` (`GameRoomLayout.vue`) để tự động animate khi thứ hạng đổi chỗ (CSS `.rank-move { transition: transform 0.55s cubic-bezier(0.22,1,0.36,1) }`) — đây là bản port Vue-idiomatic của kỹ thuật FLIP thủ công (`getBoundingClientRect` trước/sau + Web Animations API) từng có trong `hud.js` bản vanilla cũ.
 - Chat chỉ giữ tối đa 50 message trong store, không persist.
+- Mọi lệnh gọi `emitAck(...)` đều resolve về một `AckResponse` xác định (không bao giờ `undefined`) — vì vậy chỗ gọi chỉ cần `res.ok`/`res.data`, KHÔNG cần `res?.ok`. Chỉ `res.error` mới thật sự optional (dùng `res.error?.message`).
 
 ## 10. Cấu trúc thư mục
 
@@ -276,16 +294,18 @@ Matrix-Game/
 │       │                          # HudPanel, PiecePanel, ChatWidget,
 │       │                          # LeaderboardItem, OpponentsPanel,
 │       │                          # VictoryModal, NameModal, PublicRoomCard…
-│       ├── composables/           # useSocket, usePixiBoard, useLobbyNav
+│       ├── composables/           # useSocket, usePixiBoard, useLobbyNav,
+│       │                          # useRoomStatus
 │       ├── config/constants.ts    # PLAYER_COLORS và helper màu — PHẢI khớp
 │       │                          # với src/config/constants.js phía backend
 │       ├── pages/
 │       │   ├── index.vue
 │       │   ├── room/[code].vue
 │       │   └── preview/[code].vue
-│       ├── plugins/session-restore.client.ts
+│       ├── plugins/session.client.ts
 │       ├── stores/game.ts
-│       └── types/index.ts
+│       ├── types/index.ts
+│       └── utils/roomStatus.ts    # predicate thuần isLobbyStatus/isPlayingStatus/…
 └── public/                        # build output tĩnh (đè bởi build:frontend),
                                     # không sửa tay
 ```

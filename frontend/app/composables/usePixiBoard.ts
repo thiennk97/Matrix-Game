@@ -9,6 +9,7 @@ import {
   darkenColorHex,
   lerpColorHex,
 } from '~/config/constants'
+import { isPlayingStatus } from '~/utils/roomStatus'
 
 interface CellData {
   cellGroup: PIXI.Container
@@ -166,8 +167,8 @@ export function usePixiBoard(
 
   function handleCellClick(r: number, c: number) {
     if (store.isSpectating) return
-    if (!store.localRoomState
-      || store.localRoomState.status !== 'PLAYING') return
+    const roomState = store.localRoomState
+    if (!roomState || !isPlayingStatus(roomState.status)) return
 
     const myPlayer = getMyPlayer()
     if (!myPlayer || myPlayer.hasPlacedThisRound) return
@@ -181,9 +182,25 @@ export function usePixiBoard(
 
     if (!isSlotEmptyOnBoard(myBoard, coords)) return
 
-    emitAck('make_move', {
-      turn: store.localRoomState.turn,
-      slotIdx,
+    const pieceValues = roomState.currentPiece
+    if (!pieceValues) return
+
+    const turn = roomState.turn
+
+    coords.forEach((coord, idx) => {
+      myBoard[coord.r]![coord.c] = pieceValues[idx] ?? null
+    })
+    myPlayer.hasPlacedThisRound = true
+    renderBoard()
+
+    emitAck('make_move', { turn, slotIdx }).then((res) => {
+      if (res.ok) return
+      if (store.localRoomState?.turn !== turn) return
+      coords.forEach((coord) => {
+        myBoard[coord.r]![coord.c] = null
+      })
+      myPlayer.hasPlacedThisRound = false
+      renderBoard()
     })
   }
 
@@ -223,8 +240,7 @@ export function usePixiBoard(
   }
 
   function handleCellHover(r: number, c: number, isHover: boolean) {
-    if (!store.localRoomState
-      || store.localRoomState.status !== 'PLAYING') return
+    if (!isPlayingStatus(store.localRoomState?.status)) return
     if (store.isSpectating) return
     const myPlayer = getMyPlayer()
     if (!myPlayer) return
@@ -238,7 +254,7 @@ export function usePixiBoard(
   ) {
     const state = store.localRoomState
     if (!state) return null
-    const isHovering = state.status === 'PLAYING'
+    const isHovering = isPlayingStatus(state.status)
       && !myHasPlaced
       && Array.isArray(state.currentPiece)
       && state.currentPiece.length === 3
@@ -260,7 +276,7 @@ export function usePixiBoard(
     myHasPlaced: boolean,
   ) {
     const state = store.localRoomState
-    if (!state || state.status !== 'PLAYING' || myHasPlaced) return
+    if (!state || !isPlayingStatus(state.status) || myHasPlaced) return
     const slotIdx = hoverInfo?.isValid ? hoverInfo.slotIdx : null
     if (preferredAutoPlaceTurn === state.turn
       && preferredAutoPlaceSlotIdx === slotIdx) return
@@ -865,7 +881,7 @@ export function usePixiBoard(
       }
     }
 
-    const isPlaying = store.localRoomState.status === 'PLAYING'
+    const isPlaying = isPlayingStatus(store.localRoomState.status)
       && !store.isSpectating
     const isLocked = !isPlaying || myHasPlaced
     pixiGridContainer.interactiveChildren = isPlaying

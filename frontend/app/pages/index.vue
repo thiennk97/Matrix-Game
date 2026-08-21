@@ -14,8 +14,9 @@
         @join="showJoinRoom(room.roomCode)" 
         @spectate="spectateRoom(room.roomCode)"
       />
-      <div v-if="!store.publicRooms.length" class="match-list-empty grid-full-width">
-        Chưa có phòng nào. Hãy tạo phòng mới!
+      <div v-if="!store.publicRooms.length" class="empty-state grid-full-width">
+        <LucideDoorOpen class="icon" />
+        <p>Chưa có phòng nào</p>
       </div>
     </div>
 
@@ -33,7 +34,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '~/stores/game'
 import { useSocket } from '~/composables/useSocket'
-import { LucidePlus } from '@lucide/vue'
+import { LucidePlus, LucideDoorOpen } from '@lucide/vue'
 
 const store = useGameStore()
 const { emitAck, applyRoomState } = useSocket()
@@ -73,7 +74,7 @@ const handleNameSubmit = async (name: string, isCreate: boolean) => {
     : { roomCode: joiningRoomCode.value, playerName: name }
 
   const res = await emitAck(event, payload)
-  if (res?.ok && res.data) {
+  if (res.ok && res.data) {
     store.myPlayerIndex = res.data.playerIndex
     store.myPlayerId = res.data.playerId
     store.currentRoomCode = res.data.roomCode
@@ -84,16 +85,15 @@ const handleNameSubmit = async (name: string, isCreate: boolean) => {
       roomCode: res.data.roomCode,
       playerId: res.data.playerId
     }))
-    closeNameModal()
-    router.push(`/room/${res.data.roomCode}`)
+    await router.push(`/room/${res.data.roomCode}`)
   } else {
-    alert(res?.error?.message || 'Có lỗi xảy ra')
+    alert(res.error?.message || 'Có lỗi xảy ra')
   }
 }
 
 const spectateRoom = async (code: string) => {
   const res = await emitAck('spectate_room', { roomCode: code })
-  if (res?.ok) {
+  if (res.ok) {
     store.myPlayerIndex = -1
     store.myPlayerId = null
     store.currentRoomCode = code
@@ -106,9 +106,9 @@ const spectateRoom = async (code: string) => {
       playerId: null,
       isSpectating: true
     }))
-    router.push(`/preview/${code}`)
+    await router.push(`/preview/${code}`)
   } else {
-    alert(res?.error?.message)
+    alert(res.error?.message)
   }
 }
 </script>
@@ -146,6 +146,11 @@ const spectateRoom = async (code: string) => {
 
 .empty-state {
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
   text-align: center;
   color: var(--text-muted);
   padding: var(--space-6);
@@ -154,9 +159,13 @@ const spectateRoom = async (code: string) => {
   border: 1px dashed var(--border);
 }
 
+.empty-state p {
+  font-size: 0.95rem;
+}
+
 .empty-state .icon {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   color: var(--text-faint);
 }
 

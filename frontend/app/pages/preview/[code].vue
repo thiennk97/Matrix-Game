@@ -1,6 +1,5 @@
 <template>
   <GameRoomLayout
-    :room-status="roomStatus"
     :sorted-players="sortedPlayers"
   >
     <template #actions>
@@ -25,7 +24,6 @@ const { goToIndex, leaveAndGoToIndex } = useLobbyNav()
 const route = useRoute()
 
 const roomCode = route.params.code as string
-const roomStatus = computed(() => store.localRoomState?.status || 'LOBBY')
 
 const sortedPlayers = computed(() => {
   if (!store.localRoomState?.players) return []

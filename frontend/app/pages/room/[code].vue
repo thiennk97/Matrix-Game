@@ -1,11 +1,10 @@
 <template>
   <GameRoomLayout
-    :room-status="roomStatus"
     :sorted-players="sortedPlayers"
     show-piece-panel
   >
     <template #actions>
-      <button v-if="roomStatus === 'FINISHED'" class="btn btn-sm btn-primary" @click="restartGame">
+      <button v-if="isFinished" class="btn btn-sm btn-primary" @click="restartGame">
         <LucideRotateCcw class="icon" /> Đấu ván mới
       </button>
       <button class="btn btn-sm btn-muted" @click="leaveRoom">
@@ -21,15 +20,16 @@ import { useRoute } from 'vue-router'
 import { useGameStore } from '~/stores/game'
 import { useSocket } from '~/composables/useSocket'
 import { useLobbyNav } from '~/composables/useLobbyNav'
+import { useRoomStatus } from '~/composables/useRoomStatus'
 import { LucideRotateCcw, LucideLogOut } from '@lucide/vue'
 
 const store = useGameStore()
 const { emitAck, clearResultSnapshot } = useSocket()
 const { goToIndex, leaveAndGoToIndex } = useLobbyNav()
+const { isFinished } = useRoomStatus()
 const route = useRoute()
 
 const roomCode = route.params.code as string
-const roomStatus = computed(() => store.localRoomState?.status || 'LOBBY')
 
 const sortedPlayers = computed(() => {
   if (!store.localRoomState?.players) return []
@@ -49,8 +49,8 @@ onMounted(() => {
 
 const restartGame = async () => {
   const res = await emitAck('restart_game', {})
-  if (!res?.ok) {
-    alert(res?.error?.message)
+  if (!res.ok) {
+    alert(res.error?.message)
     return
   }
   clearResultSnapshot(roomCode)

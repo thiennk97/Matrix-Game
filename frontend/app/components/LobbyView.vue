@@ -122,7 +122,7 @@ const copyLink = () => {
 
 const kickPlayer = async (id: string) => {
   const res = await emitAck('kick_player', { targetPlayerId: id })
-  if (!res?.ok) alert(res?.error?.message || 'Không thể kick người chơi.')
+  if (!res.ok) alert(res.error?.message || 'Không thể kick người chơi.')
 }
 
 const toggleReady = () => {

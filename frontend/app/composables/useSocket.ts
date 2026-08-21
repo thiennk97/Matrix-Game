@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import { useGameStore } from '~/stores/game'
 import { navigateTo } from '#app'
 import type { RoomState, ChatMessage } from '~/types'
+import { isFinishedStatus } from '~/utils/roomStatus'
 
 interface AckResponse {
   ok: boolean
@@ -52,8 +53,8 @@ function applyRoomState(state: RoomState) {
   if (current && state.stateVersion < current.stateVersion) return
 
   const isFirstState = !current
-  const wasFinished = current?.status === 'FINISHED'
-  const nowFinished = state.status === 'FINISHED'
+  const wasFinished = isFinishedStatus(current?.status)
+  const nowFinished = isFinishedStatus(state.status)
 
   if (state.turn !== store.currentTurn) {
     store.currentTurn = state.turn
@@ -69,7 +70,7 @@ function applyRoomState(state: RoomState) {
       store.showVictoryModal = true
     } else {
       victoryModalTimer = setTimeout(() => {
-        if (store.localRoomState?.status === 'FINISHED') {
+        if (isFinishedStatus(store.localRoomState?.status)) {
           store.showVictoryModal = true
         }
       }, VICTORY_MODAL_DELAY_MS)
@@ -113,7 +114,7 @@ export const useSocket = () => {
       resetSession()
       navigateTo('/')
       socket?.emit('list_rooms', {}, (res: AckResponse) => {
-        if (res?.ok && res.data) {
+        if (res.ok && res.data) {
           store.publicRooms = res.data.rooms as typeof store.publicRooms
         }
       })

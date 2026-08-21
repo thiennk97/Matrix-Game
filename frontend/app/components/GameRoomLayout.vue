@@ -9,28 +9,28 @@
         <div class="panel-title">
           <span><LucideTrophy class="icon" /> Bảng Xếp Hạng</span>
         </div>
-        <div class="match-list">
+        <TransitionGroup tag="div" name="rank" class="match-list">
           <LeaderboardItem
             v-for="(player, idx) in sortedPlayers"
             :key="player.id"
             :player="player"
             :rank="idx"
           />
-        </div>
+        </TransitionGroup>
       </aside>
 
       <div class="game-area">
         <div class="panel-section board-card">
           <div class="board-main">
-            <LobbyView v-if="roomStatus === 'LOBBY'" />
+            <LobbyView v-if="isLobby" />
 
-            <div v-if="roomStatus === 'PAUSED'" class="game-pause-overlay">
+            <div v-if="isPaused" class="game-pause-overlay">
               <h2><LucidePauseCircle class="icon" /> TRẬN ĐẤU BỊ TẠM DỪNG</h2>
               <p>Đang chờ người chơi kết nối lại...</p>
             </div>
 
             <div class="hud-slot">
-              <HudPanel v-if="roomStatus === 'PLAYING'" />
+              <HudPanel v-if="isPlaying" />
             </div>
 
             <GameBoard />
@@ -42,7 +42,7 @@
       <ChatWidget />
     </div>
 
-    <OpponentsPanel v-if="roomStatus !== 'LOBBY'" />
+    <OpponentsPanel v-if="!isLobby" />
 
     <VictoryModal v-if="store.showVictoryModal" :players="victoryPlayers" />
   </div>
@@ -51,16 +51,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useGameStore } from '~/stores/game'
+import { useRoomStatus } from '~/composables/useRoomStatus'
 import { LucideTrophy, LucidePauseCircle } from '@lucide/vue'
 import type { Player } from '~/types'
 
 const props = defineProps<{
-  roomStatus: string
   sortedPlayers: Player[]
   showPiecePanel?: boolean
 }>()
 
 const store = useGameStore()
+const { isLobby, isPlaying, isPaused } = useRoomStatus()
 
 const victoryPlayers = computed(() => {
   const source = store.frozenResults ?? props.sortedPlayers
@@ -102,6 +103,27 @@ const victoryPlayers = computed(() => {
 .leaderboard-panel .match-list {
   flex: 1;
   gap: var(--space-2);
+  position: relative;
+}
+
+.rank-move {
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rank-enter-active,
+.rank-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.rank-enter-from,
+.rank-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.rank-leave-active {
+  position: absolute;
+  width: 100%;
 }
 
 .leaderboard-panel .panel-title {

@@ -126,12 +126,16 @@ export async function leaveRoom(roomCode, playerId) {
     room.hostPlayerId = findFirstActivePlayer(room)?.id || null;
   }
 
-  const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
+  const hasRemainingPlayers = room.players.some((p) => !p.abandoned);
 
-  if (!hasOnlinePlayers && room.status === ROOM_STATUS.LOBBY) {
+  if (!hasRemainingPlayers) {
     await repo.deleteRoom(roomCode);
     return null;
-  } else if (!hasOnlinePlayers && room.status === ROOM_STATUS.PLAYING) {
+  }
+
+  const hasOnlinePlayers = room.players.some((p) => p.connected && !p.abandoned);
+
+  if (!hasOnlinePlayers && room.status === ROOM_STATUS.PLAYING) {
     room.status = ROOM_STATUS.PAUSED;
     if (room.turnEndsAt) {
       room.remainingTurnMs = Math.max(0, room.turnEndsAt - Date.now());

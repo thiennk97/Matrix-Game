@@ -82,17 +82,17 @@ const leaveRoom = async () => {
 
   if (!store.myPlayerId) return
   const res = await emitAck('leave_room', { roomCode: store.currentRoomCode, playerId: store.myPlayerId })
-  if (res?.ok) {
+  if (res.ok) {
     await leaveAndGoToIndex()
   } else {
-    alert(res?.error?.message)
+    alert(res.error?.message)
   }
 }
 
 const restartGame = async () => {
   const res = await emitAck('restart_game', {})
-  if (!res?.ok) {
-    alert(res?.error?.message)
+  if (!res.ok) {
+    alert(res.error?.message)
     return
   }
   clearResultSnapshot(store.currentRoomCode)
