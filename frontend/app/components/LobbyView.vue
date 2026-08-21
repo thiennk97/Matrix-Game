@@ -21,7 +21,7 @@
 
       <div class="lobby-players-grid">
         <div 
-          v-for="idx in 8" 
+          v-for="idx in 10"
           :key="idx"
           class="player-slot-card"
           :class="[
@@ -310,6 +310,14 @@ const startGame = async () => {
 
 .player-slot-card.p8-slot {
   border-color: var(--p8-color);
+}
+
+.player-slot-card.p9-slot {
+  border-color: var(--p9-color);
+}
+
+.player-slot-card.p10-slot {
+  border-color: var(--p10-color);
 }
 
 .slot-player-name {

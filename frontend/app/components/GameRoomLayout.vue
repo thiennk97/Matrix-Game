@@ -224,7 +224,6 @@ const victoryPlayers = computed(() => {
 
   .pixi-board-container {
     min-width: 0;
-    width: auto;
   }
 
   .leaderboard-panel .match-list {

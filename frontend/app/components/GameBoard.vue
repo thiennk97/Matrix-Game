@@ -12,8 +12,32 @@ const containerRef = ref<HTMLDivElement | null>(null)
 const { initBoard, destroyBoard, renderBoard }
   = usePixiBoard(containerRef)
 
-onMounted(() => initBoard())
-onBeforeUnmount(() => destroyBoard())
+let cellSizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  initBoard()
+
+  // The next-piece panel renders its cells as plain DOM boxes rather than
+  // canvas, so it needs its own size — but the board's on-screen cell size
+  // isn't fixed: the canvas stretches via CSS to whatever width its
+  // container ends up at (467px down to whatever fits on a phone). Publish
+  // the board's actual rendered cell size as a CSS var so any DOM element
+  // (like the piece panel) can match it exactly at any viewport width,
+  // instead of guessing a fixed px value per breakpoint.
+  cellSizeObserver = new ResizeObserver((entries) => {
+    const width = entries[0]?.contentRect.width
+    if (width) {
+      document.documentElement.style.setProperty('--board-cell-size', `${width / 9}px`)
+    }
+  })
+  if (containerRef.value) cellSizeObserver.observe(containerRef.value)
+})
+
+onBeforeUnmount(() => {
+  destroyBoard()
+  cellSizeObserver?.disconnect()
+  cellSizeObserver = null
+})
 
 watch(
   () => store.localRoomState?.stateVersion,
@@ -34,12 +58,6 @@ watch(
   position: relative;
   border-radius: var(--radius-sm);
   overflow: hidden;
-}
-
-.pixi-board-container canvas {
-  display: block;
-  height: 100% !important;
-  width: 100% !important;
 }
 
 @media (max-width: 1180px) {

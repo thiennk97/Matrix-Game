@@ -6,7 +6,7 @@ import {
   ROOM_STATUS
 } from '../config/constants.js';
 
-const MAX_PLAYERS = 8;
+const MAX_PLAYERS = 10;
 
 function randomNum() {
   return Math.floor(Math.random() * (NUM_MAX - NUM_MIN + 1)) + NUM_MIN;

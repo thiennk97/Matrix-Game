@@ -38,7 +38,7 @@ Server chỉ bắt đầu listen sau khi kết nối Redis thành công. `SIGINT
 
 ## 3. Luật và vòng lặp game
 
-- Số người chơi mỗi phòng: 1–8.
+- Số người chơi mỗi phòng: 1–10 (`MAX_PLAYERS` trong `src/core/gameLogic.js`).
 - Kích thước bàn cá nhân: 9x9.
 - Số lượt: 27 (`TOTAL_SLOTS`).
 - Mỗi combo có 3 số độc lập trong khoảng 7–10 và được dùng chung cho mọi người chơi ở cùng lượt.

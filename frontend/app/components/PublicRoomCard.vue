@@ -49,10 +49,10 @@ const isLobby = computed(() => isLobbyStatus(props.room.status))
   background: var(--card-bg-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -118,10 +118,11 @@ const isLobby = computed(() => isLobbyStatus(props.room.status))
   padding: 0.65rem 0.9rem;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 480px) {
 
   .public-room-card {
-    padding: var(--space-4);
+    padding: var(--space-3);
+    gap: var(--space-2);
   }
 }
 </style>

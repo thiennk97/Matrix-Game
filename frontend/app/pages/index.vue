@@ -3,7 +3,7 @@
     <div class="index-header">
       <h2>Danh Sách Phòng</h2>
       <button class="btn btn-primary" @click="showCreateRoom">
-        <LucidePlus class="icon" /> TẠO PHÒNG MỚI
+        <LucidePlus class="icon" /> TẠO PHÒNG
       </button>
     </div>
     <div class="public-rooms-grid">
@@ -138,8 +138,9 @@ const spectateRoom = async (code: string) => {
 .public-rooms-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-3);
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
   padding: 0 var(--space-5) var(--space-5);
 }
@@ -191,9 +192,7 @@ const spectateRoom = async (code: string) => {
 @media (max-width: 480px) {
 
   .index-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
     padding: var(--space-4) var(--space-3);
   }
 
@@ -202,7 +201,8 @@ const spectateRoom = async (code: string) => {
   }
 
   .index-header .btn {
-    width: 100%;
+    font-size: 0.78rem;
+    padding: 0.6rem 0.85rem;
   }
 }
 </style>

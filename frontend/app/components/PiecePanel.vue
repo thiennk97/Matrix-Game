@@ -63,8 +63,11 @@ const playerColorStr = computed(() => {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  width: 50px;
-  min-width: 50px;
+  align-self: stretch;
+  width: var(--board-cell-size, 50px);
+  min-width: var(--board-cell-size, 50px);
+  max-width: var(--board-cell-size, 50px);
+  flex: 0 0 var(--board-cell-size, 50px);
   flex-shrink: 0;
 }
 
@@ -77,42 +80,14 @@ const playerColorStr = computed(() => {
 }
 
 .piece-box {
-  width: 50px;
-  height: 50px;
+  width: var(--board-cell-size, 50px);
+  height: var(--board-cell-size, 50px);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 1.8rem;
+  font-size: calc(var(--board-cell-size, 50px) * 0.56);
   font-weight: 600;
   color: #1a1a1a;
-}
-
-@media (max-width: 1180px) {
-
-  .piece-panel {
-    align-self: stretch;
-    flex: 0 0 50px;
-    flex-direction: column;
-    justify-content: flex-start;
-    max-width: 50px;
-    min-width: 50px;
-    width: 50px;
-  }
-}
-
-@media (max-width: 480px) {
-
-  .piece-box {
-    height: 44px;
-    width: 44px;
-  }
-
-  .piece-panel {
-    flex-basis: 44px;
-    max-width: 44px;
-    min-width: 44px;
-    width: 44px;
-  }
 }
 </style>

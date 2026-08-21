@@ -24,6 +24,8 @@ export const PLAYER_COLORS = [
   '#fb7185',
   '#818cf8',
   '#2dd4bf',
+  '#4ade80',
+  '#f472b6',
 ]
 
 export function getPlayerColor(playerIndex: number): string {
@@ -78,10 +80,8 @@ export function getSlotIndexForCell(r: number, c: number): number {
 export function getMyDisplayColors(colorIndex: number) {
   const colorStr = getPlayerColor(colorIndex)
   const rawColorHex = colorToHex(colorStr)
-  const lastPlacedColorHex = darkenColorHex(rawColorHex, 0.7)
   return {
     colorHex: rawColorHex,
-    lastPlacedColorHex,
     hoverHex: rawColorHex,
     textColor: '#1a1a1a',
   }

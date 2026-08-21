@@ -224,6 +224,10 @@ const restartGame = async () => {
     font-size: 1rem;
     padding: 0 var(--space-3);
   }
+
+  .modal-card .modal-buttons {
+    flex-direction: column;
+  }
 }
 
 .rank-card {

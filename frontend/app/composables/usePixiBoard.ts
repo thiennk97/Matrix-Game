@@ -130,7 +130,6 @@ export function usePixiBoard(
 
   let prevMyBoardSnapshot: (number | null)[][] | null = null
   let prevFocusedPlayerId: string | null = null
-  let lastPlacedCoords: { r: number; c: number }[] = []
 
   let preferredAutoPlaceTurn = -1
   let preferredAutoPlaceSlotIdx: number | null = null
@@ -392,8 +391,6 @@ export function usePixiBoard(
   function buildCellColorGrid(
     myBoard: (number | null)[][],
     colorHex: number,
-    lastPlacedColorHex: number,
-    placed: { r: number; c: number }[],
   ): (number | null)[][] {
     const grid: (number | null)[][] = Array(9).fill(null).map(
       () => Array(9).fill(null),
@@ -405,11 +402,6 @@ export function usePixiBoard(
         }
       }
     }
-    placed.forEach((coord) => {
-      if (grid[coord.r]![coord.c] !== null) {
-        grid[coord.r]![coord.c] = lastPlacedColorHex
-      }
-    })
     return grid
   }
 
@@ -759,6 +751,9 @@ export function usePixiBoard(
     })
 
     const canvas = pixiApp.view as HTMLCanvasElement
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.display = 'block'
     containerRef.value.appendChild(canvas)
 
     const gridBg = new PIXI.Graphics()
@@ -801,7 +796,6 @@ export function usePixiBoard(
     pixiCells = []
     placementBounces = []
     prevMyBoardSnapshot = null
-    lastPlacedCoords = []
     currentMatchedLines = []
     matchLineAnimElapsed = {}
   }
@@ -813,7 +807,6 @@ export function usePixiBoard(
     preferredAutoPlaceTurn = -1
     preferredAutoPlaceSlotIdx = null
     prevFocusedPlayerId = null
-    lastPlacedCoords = []
     prevMyBoardSnapshot = null
     if (hoverOverlay) {
       hoverOverlay.targetAlpha = 0
@@ -832,7 +825,6 @@ export function usePixiBoard(
     if (store.isSpectating && myPlayer.id !== prevFocusedPlayerId) {
       prevFocusedPlayerId = myPlayer.id
       prevMyBoardSnapshot = null
-      lastPlacedCoords = []
     }
 
     const myBoard = myPlayer.board
@@ -843,7 +835,6 @@ export function usePixiBoard(
     const colors = getMyDisplayColors(colorIndex)
 
     if (prevMyBoardSnapshot) {
-      const newlyPlaced: { r: number; c: number }[] = []
       for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {
           const prevRow = prevMyBoardSnapshot[r]
@@ -852,19 +843,14 @@ export function usePixiBoard(
           const nowFilled = curRow != null
             && curRow[c] !== null && curRow[c] !== undefined
           if (wasEmpty && nowFilled) {
-            newlyPlaced.push({ r, c })
-            startCellPlacementBounce(r, c, colors.lastPlacedColorHex)
+            startCellPlacementBounce(r, c, colors.colorHex)
           }
         }
       }
-      if (newlyPlaced.length) lastPlacedCoords = newlyPlaced
     }
     prevMyBoardSnapshot = myBoard.map((row) => [...row])
 
-    const cellColorGrid = buildCellColorGrid(
-      myBoard, colors.colorHex,
-      colors.lastPlacedColorHex, lastPlacedCoords,
-    )
+    const cellColorGrid = buildCellColorGrid(myBoard, colors.colorHex)
 
     const hoverInfo = store.isSpectating
       ? null
