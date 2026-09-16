@@ -13,13 +13,13 @@ export function useLobbyNav() {
   }
 
   const goToIndex = async () => {
-    router.push('/')
+    router.push('/matrix')
     await refreshRoomList()
   }
 
   const leaveAndGoToIndex = async () => {
     const roomCode = store.currentRoomCode
-    await router.push('/')
+    await router.push('/matrix')
     if (roomCode) clearResultSnapshot(roomCode)
     resetSession()
     localStorage.removeItem('matrix-game-session')

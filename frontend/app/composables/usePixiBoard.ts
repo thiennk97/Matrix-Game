@@ -9,8 +9,8 @@ import {
   darkenColorHex,
   lerpColorHex,
 } from '~/config/constants'
-import { isPlayingStatus } from '~/utils/roomStatus'
-import { calculateScoreIncremental } from '~/utils/gameScoring'
+import { isPlayingStatus } from '~/utils/matrix/roomStatus'
+import { calculateScoreIncremental } from '~/utils/matrix/gameScoring'
 
 interface CellData {
   cellGroup: PIXI.Container

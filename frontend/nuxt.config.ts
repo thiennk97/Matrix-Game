@@ -3,6 +3,12 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: false,
   modules: ['@pinia/nuxt', '@nuxt/eslint'],
+  components: [
+    { path: '~/components/common', pathPrefix: false },
+    { path: '~/components/matrix', pathPrefix: false },
+    { path: '~/components/tank', pathPrefix: false },
+    '~/components'
+  ],
   css: ['~/assets/css/style.css'],
   vite: {
     build: {

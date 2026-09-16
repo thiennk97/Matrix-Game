@@ -18,6 +18,7 @@ import {
   setAutoPlacePreference,
   broadcastLobbyRooms
 } from '../state/roomManager.js';
+import { registerTankSocketHandlers, handleTankDisconnect } from './tankSocketHandler.js';
 
 const MAX_CHAT_LENGTH = 100;
 const MAX_PLAYER_NAME_LENGTH = 24;
@@ -124,6 +125,7 @@ async function advanceIfAllPlaced(io, room, roomCode) {
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`🟢 Client connected: ${socket.id}`);
+    registerTankSocketHandlers(io, socket);
 
     socket.on('list_rooms', async (data, ack) => {
       try {
@@ -588,6 +590,7 @@ export function registerSocketHandlers(io) {
 
     socket.on('disconnect', async () => {
       console.log(`🔴 Client disconnected: ${socket.id}`);
+      handleTankDisconnect(io, socket);
       const session = socketToPlayerMap.get(socket.id);
       if (session) {
         socketToPlayerMap.delete(socket.id);
