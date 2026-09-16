@@ -181,9 +181,9 @@ export function registerTankSocketHandlers(io, socket) {
       const victim = room.players.find(p => p.id === victimId);
       if (!victim) return;
 
-      // Prevent duplicate kill deductions within 2.5s immunity window (e.g. 2 rapid bullets)
+      // Prevent duplicate kill deductions within 1.5s immunity window
       const now = Date.now();
-      if (victim.lastKilledAt && (now - victim.lastKilledAt < 2500)) {
+      if (victim.lastKilledAt && (now - victim.lastKilledAt < 1500)) {
         return;
       }
       victim.lastKilledAt = now;
@@ -200,6 +200,8 @@ export function registerTankSocketHandlers(io, socket) {
       if (victimTeam && teamRemainingLives <= 0) {
         room.status = 'FINISHED';
         room.winner = victimTeam === 'blue' ? 'red' : 'blue';
+        if (!room.teamScores) room.teamScores = { blue: 0, red: 0 };
+        room.teamScores[room.winner] = (room.teamScores[room.winner] || 0) + 1;
         io.to(`tank_${roomCode}`).emit('tank_game_over', {
           winner: room.winner,
           reason: 'lives',
@@ -226,6 +228,8 @@ export function registerTankSocketHandlers(io, socket) {
       // If blue eagle destroyed -> red wins; if red eagle destroyed -> blue wins
       room.winner = destroyedTeam === 'blue' ? 'red' : 'blue';
       room.eagles[destroyedTeam].alive = false;
+      if (!room.teamScores) room.teamScores = { blue: 0, red: 0 };
+      room.teamScores[room.winner] = (room.teamScores[room.winner] || 0) + 1;
 
       io.to(`tank_${roomCode}`).emit('tank_game_over', {
         winner: room.winner,

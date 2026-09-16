@@ -1,12 +1,17 @@
 <template>
-  <div class="pvp-game-container">
+  <div class="pvp-game-container" ref="containerRef" :class="{ 'is-fullscreen': isFullscreen }">
     <!-- Match HUD Top: Both Team Eagles & Scores -->
     <div class="pvp-top-hud">
       <!-- Blue Team Status -->
       <div class="team-hud-block blue-hud" :class="{ dead: !blueEagleAlive }">
         <div class="hud-crest">🛡️</div>
         <div class="hud-meta">
-          <span class="hud-team-name">ĐỘI XANH</span>
+          <div class="hud-team-title-row">
+            <span class="hud-team-name">ĐỘI XANH</span>
+            <span class="team-series-badge blue-badge" title="Số ván thắng của Đội Xanh">
+              🏆 {{ currentTankRoom?.teamScores?.blue ?? 0 }}
+            </span>
+          </div>
           <span class="hud-status-tag">{{ blueEagleAlive ? 'ĐẠI BÀNG: BÌNH YÊN' : 'ĐẠI BÀNG: BỊ TIÊU DIỆT' }}</span>
         </div>
       </div>
@@ -16,17 +21,38 @@
           <span class="room-code-tag">{{ currentTankRoom?.roomCode }}</span>
           <span class="map-name-tag">🗺️ {{ currentMapName }}</span>
         </div>
-        <div class="vs-badge">VS</div>
+        <div class="series-scoreboard-box" title="Tổng tỉ số liên đấu nhiều ván giữa 2 đội">
+          <span class="series-num blue-score">{{ currentTankRoom?.teamScores?.blue ?? 0 }}</span>
+          <span class="series-vs">:</span>
+          <span class="series-num red-score">{{ currentTankRoom?.teamScores?.red ?? 0 }}</span>
+        </div>
+        <div class="series-caption">TỈ SỐ LIÊN ĐẤU</div>
       </div>
 
       <!-- Red Team Status -->
       <div class="team-hud-block red-hud" :class="{ dead: !redEagleAlive }">
         <div class="hud-meta text-right">
-          <span class="hud-team-name">ĐỘI ĐỎ</span>
+          <div class="hud-team-title-row justify-end">
+            <span class="team-series-badge red-badge" title="Số ván thắng của Đội Đỏ">
+              🏆 {{ currentTankRoom?.teamScores?.red ?? 0 }}
+            </span>
+            <span class="hud-team-name">ĐỘI ĐỎ</span>
+          </div>
           <span class="hud-status-tag">{{ redEagleAlive ? 'ĐẠI BÀNG: BÌNH YÊN' : 'ĐẠI BÀNG: BỊ TIÊU DIỆT' }}</span>
         </div>
         <div class="hud-crest">🛡️</div>
       </div>
+
+      <!-- Fullscreen Toggle Button -->
+      <button 
+        class="btn-fullscreen-toggle" 
+        @click="toggleFullscreen" 
+        :title="isFullscreen ? 'Thu nhỏ (Esc)' : 'Toàn màn hình (F)'"
+      >
+        <LucideMinimize v-if="isFullscreen" class="icon" />
+        <LucideMaximize v-else class="icon" />
+        <span class="fs-label">{{ isFullscreen ? 'THU NHỎ' : 'TOÀN MÀN HÌNH' }}</span>
+      </button>
     </div>
 
     <!-- Canvas Frame -->
@@ -56,6 +82,16 @@
             <p class="winner-desc">
               {{ gameOverReasonText }}
             </p>
+
+            <!-- Series Score in Victory Modal -->
+            <div class="series-victory-banner">
+              <span class="series-victory-title">TỔNG TỈ SỐ LIÊN ĐẤU</span>
+              <div class="series-victory-score">
+                <span class="team-blue-text">ĐỘI XANH: <b>{{ currentTankRoom?.teamScores?.blue ?? 0 }}</b></span>
+                <span class="series-victory-dash">-</span>
+                <span class="team-red-text"><b>{{ currentTankRoom?.teamScores?.red ?? 0 }}</b> :ĐỘI ĐỎ</span>
+              </div>
+            </div>
 
             <div class="match-stats-table">
               <div 
@@ -175,6 +211,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { LucideMaximize, LucideMinimize } from '@lucide/vue'
 import { useTankSocket } from '~/composables/useTankSocket'
 import { tankAudio } from '~/utils/tank/tankAudio'
 import { 
@@ -207,6 +244,28 @@ const {
   rematch, 
   leaveRoom 
 } = useTankSocket()
+
+// Fullscreen State & Controller
+const isFullscreen = ref(false)
+const containerRef = ref<HTMLElement | null>(null)
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    const el = containerRef.value || document.documentElement
+    el.requestFullscreen().then(() => {
+      isFullscreen.value = true
+    }).catch(err => {
+      console.warn('Fullscreen error:', err)
+      document.documentElement.requestFullscreen().catch(() => {})
+    })
+  } else {
+    document.exitFullscreen().then(() => {
+      isFullscreen.value = false
+    }).catch(err => {
+      console.warn('Exit fullscreen error:', err)
+    })
+  }
+}
 
 // Constants
 const TILE_SIZE = 16
@@ -305,7 +364,7 @@ function createLocalTank(): Tank {
     hp: 1,
     shootCooldown: 0,
     invulnerableTime: 0,
-    invulnerableUntil: Date.now() + 3000 // 3s shield on match start
+    invulnerableUntil: Date.now() + 1500 // 1.5s shield on match start
   }
 }
 
@@ -365,7 +424,7 @@ onMounted(() => {
         hp: 1,
         shootCooldown: 0,
         invulnerableTime: 0,
-        invulnerableUntil: Date.now() + 3000 // 3s shield on match start
+        invulnerableUntil: Date.now() + 1500 // 1.5s shield on match start
       })
     }
   })
@@ -390,7 +449,7 @@ onMounted(() => {
           remote.x = x
           remote.y = y
           remote.dir = dir as Direction
-          remote.invulnerableUntil = Date.now() + 3000
+          remote.invulnerableUntil = Date.now() + 1500
         }
       }
     },
@@ -443,7 +502,25 @@ onMounted(() => {
       if (victim && victim.x >= 0 && victim.y >= 0) {
         spawnExplosion(victim.x + TANK_SIZE / 2, victim.y + TANK_SIZE / 2, true)
       }
-      if (victimId !== myTank.id) {
+      if (victimId === myTank.id) {
+        // Local tank died -> ALWAYS reset back to base spawn point with 1.5s shield!
+        const me = room?.players?.find((p: any) => p.id === myPlayerId.value)
+        const livesLeft = victimLives !== undefined ? victimLives : (me?.lives ?? 0)
+        if (livesLeft <= 0) {
+          myTank.x = -999
+          myTank.y = -999
+          sendMove(-999, -999, 0)
+        } else {
+          const sp = getSpawnForPlayer(myTank.id as string)
+          myTank.x = sp.x
+          myTank.y = sp.y
+          myTank.dir = sp.dir
+          myTank.invulnerableUntil = Date.now() + 1500
+          myTank.invulnerableTime = 0
+          sendRespawn(myTank.x, myTank.y, myTank.dir)
+          sendMove(myTank.x, myTank.y, myTank.dir)
+        }
+      } else {
         const remote = remoteTanks.get(victimId)
         if (remote) {
           const livesLeft = victimLives !== undefined ? victimLives : (room?.players?.find((p: any) => p.id === victimId)?.lives ?? 0)
@@ -452,12 +529,12 @@ onMounted(() => {
             remote.y = -999
             remoteTanks.delete(victimId)
           } else {
-            // Immediate respawn on opponents screen too!
+            // Immediate respawn back to base spawn point with 1.5s shield!
             const sp = getSpawnForPlayer(victimId)
             remote.x = sp.x
             remote.y = sp.y
             remote.dir = sp.dir
-            remote.invulnerableUntil = Date.now() + 3000
+            remote.invulnerableUntil = Date.now() + 1500
           }
         }
       }
@@ -478,6 +555,11 @@ onMounted(() => {
     }
   })
 
+  const onFsChange = () => {
+    isFullscreen.value = !!document.fullscreenElement
+  }
+  document.addEventListener('fullscreenchange', onFsChange)
+
   lastTime = performance.now()
   animationFrameId = requestAnimationFrame(gameLoop)
 })
@@ -486,10 +568,19 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrameId)
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
+  document.removeEventListener('fullscreenchange', onFsChange)
 })
+
+function onFsChange() {
+  isFullscreen.value = !!document.fullscreenElement
+}
 
 // Input
 function handleKeyDown(e: KeyboardEvent) {
+  if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
+    toggleFullscreen()
+    return
+  }
   if (winner.value || isEliminated.value) return
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault()
@@ -758,11 +849,17 @@ function updateBullets() {
             tankAudio.hitSteel()
             spawnSparks(b.x + 3, b.y + 3, '#38bdf8', 10)
           } else {
-            // Give remote tank 3s shield on our client immediately so a second bullet deflects harmlessly!
-            rt.invulnerableUntil = Date.now() + 3000
+            // Give remote tank 1.5s shield and immediately reposition to its spawn point!
+            rt.invulnerableUntil = Date.now() + 1500
+            const sp = getSpawnForPlayer(rt.id as string)
+            rt.x = sp.x
+            rt.y = sp.y
+            rt.dir = sp.dir
             spawnExplosion(rt.x + TANK_SIZE / 2, rt.y + TANK_SIZE / 2, true)
-            // Note: The victim handles their own death and sends sendKill.
-            // This prevents duplicate kill events over the network.
+            // If local player fired this bullet, notify server immediately of the kill
+            if (b.ownerId === myPlayerId.value) {
+              sendKill(rt.id as string, myPlayerId.value)
+            }
           }
           break
         }
@@ -777,11 +874,11 @@ let lastDeathAt = 0
 function handleLocalDeath(killerId: string) {
   const now = Date.now()
   // Guard against duplicate deaths from multiple rapid bullets (only 1 life lost!)
-  if (now - lastDeathAt < 2500) return
+  if (now - lastDeathAt < 1500) return
   lastDeathAt = now
 
-  // Immediate 3s invulnerability so any other bullet in flight hits the shield
-  myTank.invulnerableUntil = now + 3000
+  // Immediate 1.5s invulnerability so any other bullet in flight hits the shield
+  myTank.invulnerableUntil = now + 1500
   myTank.invulnerableTime = 0
 
   spawnExplosion(myTank.x + TANK_SIZE / 2, myTank.y + TANK_SIZE / 2, true)
@@ -1431,6 +1528,77 @@ async function handleBackToLobby() {
   margin: 0 auto;
 }
 
+/* Fullscreen mode: 100vh, 100vw, NO SCROLL */
+:fullscreen,
+.pvp-game-container:fullscreen,
+.pvp-game-container.is-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #050811 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  overflow: hidden !important;
+}
+
+:fullscreen .pvp-top-hud,
+.pvp-game-container.is-fullscreen .pvp-top-hud {
+  padding: 6px 14px !important;
+  border-radius: 0 !important;
+  flex-shrink: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+}
+
+:fullscreen .screen-frame,
+.pvp-game-container.is-fullscreen .screen-frame {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  border: none !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+:fullscreen .canvas-wrapper,
+.pvp-game-container.is-fullscreen .canvas-wrapper {
+  width: min(calc(100vh - 96px), calc(100vw - 160px)) !important;
+  height: min(calc(100vh - 96px), calc(100vw - 160px)) !important;
+  max-width: calc(100vh - 96px) !important;
+  max-height: calc(100vh - 96px) !important;
+  flex-shrink: 0 !important;
+}
+
+:fullscreen .pvp-sidebar,
+.pvp-game-container.is-fullscreen .pvp-sidebar {
+  height: min(calc(100vh - 96px), calc(100vw - 160px)) !important;
+  max-height: min(calc(100vh - 96px), calc(100vw - 160px)) !important;
+  padding: 4px 6px !important;
+  width: 130px !important;
+}
+
+:fullscreen .cabinet-footer,
+.pvp-game-container.is-fullscreen .cabinet-footer {
+  padding: 4px 12px !important;
+  flex-shrink: 0 !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
+
+:fullscreen .desktop-hints,
+.pvp-game-container.is-fullscreen .desktop-hints {
+  font-size: 0.72rem !important;
+  gap: 12px !important;
+}
+
 .pvp-top-hud {
   display: flex;
   justify-content: space-between;
@@ -1514,6 +1682,141 @@ async function handleBackToLobby() {
   font-weight: 900;
   font-size: 0.85rem;
   color: var(--matchbox-gold);
+}
+
+.hud-team-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-team-title-row.justify-end {
+  justify-content: flex-end;
+}
+
+.team-series-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.team-series-badge.blue-badge {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid #38bdf8;
+  color: #38bdf8;
+}
+
+.team-series-badge.red-badge {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+
+.series-scoreboard-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #475569;
+  border-radius: 6px;
+  padding: 2px 10px;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
+.series-num {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 1.15rem;
+}
+
+.series-num.blue-score {
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+.series-num.red-score {
+  color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.series-vs {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--matchbox-gold);
+}
+
+.series-caption {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.06em;
+}
+
+.btn-fullscreen-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-fullscreen-toggle:hover {
+  background: #334155;
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.btn-fullscreen-toggle .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.series-victory-banner {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid #475569;
+  border-radius: 8px;
+  padding: 8px 16px;
+  margin: 10px 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.series-victory-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--matchbox-gold);
+  letter-spacing: 0.08em;
+}
+
+.series-victory-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+}
+
+.series-victory-dash {
+  color: #64748b;
+  font-weight: bold;
 }
 
 .screen-frame {

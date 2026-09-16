@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     { path: '~/components/common', pathPrefix: false },
     { path: '~/components/matrix', pathPrefix: false },
     { path: '~/components/tank', pathPrefix: false },
+    { path: '~/components/caro', pathPrefix: false },
     '~/components'
   ],
   css: ['~/assets/css/style.css'],

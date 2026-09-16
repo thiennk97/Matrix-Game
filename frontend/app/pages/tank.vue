@@ -6,12 +6,15 @@
       </NuxtLink>
 
       <div class="game-switch-pills">
-        <NuxtLink to="/" class="pill-item">
+        <NuxtLink to="/matrix" class="pill-item">
           <LucideGrid3x3 class="icon" /> MATRIX BATTLE
         </NuxtLink>
         <span class="pill-item active">
           <LucideShield class="icon" /> BATTLE CITY 1990
         </span>
+        <NuxtLink to="/caro" class="pill-item">
+          <LucideSwords class="icon" /> CỜ CARO ONLINE
+        </NuxtLink>
       </div>
     </div>
 
@@ -206,5 +209,15 @@ const activeMode = ref<'pvp' | 'solo'>('pvp')
   .mode-tab-btn {
     justify-content: center;
   }
+}
+
+:fullscreen .tank-nav-bar,
+:fullscreen .tank-mode-tabs,
+:fullscreen .tank-hero-header {
+  display: none !important;
+}
+
+:fullscreen {
+  overflow: hidden !important;
 }
 </style>

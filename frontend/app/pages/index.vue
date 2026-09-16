@@ -7,11 +7,11 @@
       </div>
       <h1 class="portal-title">CHỌN TRÒ CHƠI BẮT ĐẦU</h1>
       <p class="portal-subtitle">
-        Chọn một trò chơi bên dưới để vào sảnh chờ, xem danh sách phòng hoặc tạo phòng mới
+        Chọn một trò chơi bên dưới để vào sảnh chờ, xem danh sách phòng hoặc tạo phòng thi đấu
       </p>
     </div>
 
-    <!-- 2 Game Selection Cards -->
+    <!-- 3 Game Selection Cards -->
     <div class="portal-games-grid">
       <!-- Game 1: Matrix Battle -->
       <NuxtLink to="/matrix" class="portal-game-card matrix-card">
@@ -70,6 +70,35 @@
           </span>
         </div>
       </NuxtLink>
+
+      <!-- Game 3: Cờ Caro Online -->
+      <NuxtLink to="/caro" class="portal-game-card caro-card">
+        <div class="card-glow-bg caro-glow"></div>
+        <div class="card-header-row">
+          <div class="game-badge caro-badge">1 VS 1 ĐỈNH CAO</div>
+          <span class="player-capacity">1–2 Người</span>
+        </div>
+
+        <div class="card-visual-center">
+          <div class="visual-icon-box caro-box">⚔️</div>
+          <h2 class="game-title">CỜ CARO ONLINE</h2>
+          <p class="game-summary">
+            Đấu trí Gomoku 5 quân liên tiếp thời gian thực. Đồ họa hiệu ứng Neon/Zen obsidian, hỗ trợ luật chặn 2 đầu kinh điển và phòng đấu online 2 người!
+          </p>
+        </div>
+
+        <div class="card-tags-list">
+          <span class="portal-tag">15x15 Caro</span>
+          <span class="portal-tag">Luật Chặn 2 Đầu</span>
+          <span class="portal-tag">Đấu Online & Bot AI</span>
+        </div>
+
+        <div class="card-footer-action">
+          <span class="enter-btn-text caro-btn-text">
+            VÀO SẢNH CỜ CARO <LucideArrowRight class="icon" />
+          </span>
+        </div>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -85,10 +114,10 @@ import { LucideArrowRight } from '@lucide/vue'
   align-items: center;
   justify-content: center;
   min-height: calc(100vh - 120px);
-  max-width: 1100px;
+  max-width: 1280px;
   width: 100%;
   margin: 0 auto;
-  padding: var(--space-4) var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-4) var(--space-6);
 }
 
 .portal-hero {
@@ -139,14 +168,14 @@ import { LucideArrowRight } from '@lucide/vue'
 .portal-subtitle {
   color: var(--text-muted);
   font-size: 0.95rem;
-  max-width: 600px;
+  max-width: 680px;
   margin: 0 auto;
   line-height: 1.5;
 }
 
 .portal-games-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-5);
   width: 100%;
 }
@@ -156,7 +185,7 @@ import { LucideArrowRight } from '@lucide/vue'
   background: var(--card-bg);
   border: 2px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: var(--space-6);
+  padding: var(--space-5) var(--space-5) var(--space-6);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -176,6 +205,12 @@ import { LucideArrowRight } from '@lucide/vue'
   transform: translateY(-6px);
   border-color: rgba(249, 115, 22, 0.6);
   box-shadow: 0 16px 40px rgba(249, 115, 22, 0.2);
+}
+
+.caro-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(52, 211, 153, 0.6);
+  box-shadow: 0 16px 40px rgba(52, 211, 153, 0.2);
 }
 
 .card-header-row {
@@ -206,6 +241,12 @@ import { LucideArrowRight } from '@lucide/vue'
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
   border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.caro-badge {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
 }
 
 .player-capacity {
@@ -244,7 +285,7 @@ import { LucideArrowRight } from '@lucide/vue'
 
 .game-title {
   font-family: 'Orbitron', sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 900;
   letter-spacing: 1.5px;
   color: var(--text-main);
@@ -322,6 +363,24 @@ import { LucideArrowRight } from '@lucide/vue'
   background: var(--matchbox-orange);
   color: white;
   box-shadow: 0 0 16px rgba(249, 115, 22, 0.5);
+}
+
+.caro-btn-text {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34d399;
+}
+
+.portal-game-card:hover .caro-btn-text {
+  background: #059669;
+  color: white;
+  box-shadow: 0 0 16px rgba(5, 150, 105, 0.5);
+}
+
+@media (max-width: 1024px) {
+  .portal-games-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
 }
 
 @media (max-width: 820px) {

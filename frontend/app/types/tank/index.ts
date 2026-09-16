@@ -86,6 +86,7 @@ export interface TankRoomState {
     red: { alive: boolean }
   }
   winner: Team | null
+  teamScores?: { blue: number; red: number }
   destroyedTiles?: { r: number; c: number }[]
   createdAt: number
 }

@@ -13,6 +13,9 @@
         <NuxtLink to="/tank" class="pill-item">
           <LucideShield class="icon" /> BATTLE CITY 1990
         </NuxtLink>
+        <NuxtLink to="/caro" class="pill-item">
+          <LucideSwords class="icon" /> CỜ CARO ONLINE
+        </NuxtLink>
       </div>
     </div>
 
@@ -60,7 +63,8 @@ import {
   LucideDoorOpen, 
   LucideArrowLeft, 
   LucideGrid3x3, 
-  LucideShield 
+  LucideShield,
+  LucideSwords
 } from '@lucide/vue'
 
 const store = useGameStore()

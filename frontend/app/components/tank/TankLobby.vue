@@ -69,6 +69,23 @@
         </button>
       </div>
 
+      <!-- Series Score Banner (When multiple matches played) -->
+      <div 
+        v-if="currentTankRoom.teamScores && ((currentTankRoom.teamScores.blue || 0) > 0 || (currentTankRoom.teamScores.red || 0) > 0)" 
+        class="lobby-series-banner"
+      >
+        <div class="lobby-series-label">🏆 TỔNG TỈ SỐ LIÊN ĐẤU CỦA PHÒNG</div>
+        <div class="lobby-series-score-row">
+          <span class="lobby-score-pill blue">
+            ĐỘI XANH: <b>{{ currentTankRoom.teamScores.blue || 0 }}</b>
+          </span>
+          <span class="lobby-score-divider">:</span>
+          <span class="lobby-score-pill red">
+            <b>{{ currentTankRoom.teamScores.red || 0 }}</b> :ĐỘI ĐỎ
+          </span>
+        </div>
+      </div>
+
       <!-- Teams Showcase (Blue vs Red) -->
       <div class="teams-container">
         <!-- Team Blue (South Base) -->
@@ -560,6 +577,55 @@ function copyRoomCode() {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+.lobby-series-banner {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+  border: 1px solid #475569;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.lobby-series-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--matchbox-gold);
+  letter-spacing: 0.05em;
+}
+
+.lobby-series-score-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.lobby-score-pill {
+  font-size: 0.85rem;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+.lobby-score-pill.blue {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid #38bdf8;
+  color: #38bdf8;
+}
+
+.lobby-score-pill.red {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+
+.lobby-score-divider {
+  color: #64748b;
+  font-weight: 900;
 }
 
 .waiting-header {

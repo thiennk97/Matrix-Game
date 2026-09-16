@@ -76,6 +76,7 @@ export function createTankRoom(playerName, socketId) {
       red: { alive: true }
     },
     winner: null,
+    teamScores: { blue: 0, red: 0 },
     mapIndex: 0,
     destroyedTiles: [],
     createdAt: Date.now()
@@ -253,6 +254,9 @@ export function resetTankRematch(roomCode) {
 
   room.status = 'LOBBY';
   room.winner = null;
+  if (!room.teamScores) {
+    room.teamScores = { blue: 0, red: 0 };
+  }
   room.destroyedTiles = [];
   room.mapIndex = Math.floor(Math.random() * 12);
   room.eagles = {

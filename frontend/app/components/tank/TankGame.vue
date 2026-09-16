@@ -1,5 +1,5 @@
 <template>
-  <div class="battle-city-container">
+  <div class="battle-city-container" ref="containerRef" :class="{ 'is-fullscreen': isFullscreen }">
     <div class="arcade-cabinet">
       <!-- Arcade Header -->
       <div class="cabinet-header">
@@ -13,6 +13,10 @@
           <button class="icon-btn" :class="{ muted: !soundEnabled }" @click="toggleSound" title="Bật/Tắt Âm Thanh">
             <LucideVolume2 v-if="soundEnabled" class="icon" />
             <LucideVolumeX v-else class="icon" />
+          </button>
+          <button class="icon-btn" @click="toggleFullscreen" :title="isFullscreen ? 'Thu nhỏ (Esc)' : 'Toàn màn hình (F)'">
+            <LucideMinimize v-if="isFullscreen" class="icon" />
+            <LucideMaximize v-else class="icon" />
           </button>
           <button class="icon-btn" @click="togglePause" title="Tạm Dừng (P/Enter)">
             <LucidePause v-if="!isPaused" class="icon" />
@@ -171,7 +175,9 @@ import {
   LucideVolumeX, 
   LucidePause, 
   LucidePlay, 
-  LucideRotateCcw 
+  LucideRotateCcw,
+  LucideMaximize,
+  LucideMinimize
 } from '@lucide/vue'
 import { tankAudio } from '~/utils/tank/tankAudio'
 import { 
@@ -197,6 +203,7 @@ const TANK_SIZE = 28
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const soundEnabled = ref(true)
 const isPaused = ref(false)
+const isFullscreen = ref(false)
 const gameState = ref<'playing' | 'gameover' | 'victory'>('playing')
 const score = ref(0)
 const lives = ref(3)
@@ -241,8 +248,33 @@ function createPlayerTank(): Tank {
     isPlayer: true,
     hp: 1,
     shootCooldown: 0,
-    invulnerableTime: 180
+    invulnerableTime: 90 // 1.5s protection shield (90 frames @ 60fps)
   }
+}
+
+// --- Fullscreen Controller ---
+const containerRef = ref<HTMLElement | null>(null)
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    const el = containerRef.value || document.documentElement
+    el.requestFullscreen().then(() => {
+      isFullscreen.value = true
+    }).catch(err => {
+      console.warn('Fullscreen error:', err)
+      document.documentElement.requestFullscreen().catch(() => {})
+    })
+  } else {
+    document.exitFullscreen().then(() => {
+      isFullscreen.value = false
+    }).catch(err => {
+      console.warn('Exit fullscreen error:', err)
+    })
+  }
+}
+
+const onFsChange = () => {
+  isFullscreen.value = !!document.fullscreenElement
 }
 
 // --- Audio & Controls Helpers ---
@@ -277,6 +309,7 @@ onMounted(() => {
   }
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('keyup', handleKeyUp)
+  document.addEventListener('fullscreenchange', onFsChange)
 
   initStage(1)
   lastTime = performance.now()
@@ -287,6 +320,7 @@ onUnmounted(() => {
   cancelAnimationFrame(animationFrameId)
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
+  document.removeEventListener('fullscreenchange', onFsChange)
 })
 
 // --- Initialization ---
@@ -327,6 +361,11 @@ function nextStage() {
 
 // --- Input Handling ---
 function handleKeyDown(e: KeyboardEvent) {
+  if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
+    toggleFullscreen()
+    return
+  }
+
   if (e.repeat) return
 
   if (e.code === 'KeyP' || e.code === 'Enter') {
@@ -1077,6 +1116,85 @@ function drawPowerUp(c: CanvasRenderingContext2D, pu: PowerUp) {
   align-items: center;
   width: 100%;
   padding: var(--space-4);
+}
+
+/* Fullscreen mode: 100vh, 100vw, NO SCROLL */
+:fullscreen,
+.battle-city-container:fullscreen,
+.battle-city-container.is-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #050811 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  overflow: hidden !important;
+}
+
+:fullscreen .arcade-cabinet,
+.battle-city-container.is-fullscreen .arcade-cabinet {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  width: auto !important;
+  max-width: min(100vw, calc((100vh - 84px) + 90px)) !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  overflow: hidden !important;
+}
+
+:fullscreen .cabinet-header,
+.battle-city-container.is-fullscreen .cabinet-header {
+  padding: 6px 14px !important;
+  flex-shrink: 0 !important;
+  border-bottom: 1px solid #334155 !important;
+}
+
+:fullscreen .screen-frame,
+.battle-city-container.is-fullscreen .screen-frame {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  border-bottom: none !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+:fullscreen .canvas-wrapper,
+.battle-city-container.is-fullscreen .canvas-wrapper {
+  width: min(calc(100vh - 86px), calc(100vw - 110px)) !important;
+  height: min(calc(100vh - 86px), calc(100vw - 110px)) !important;
+  max-width: calc(100vh - 86px) !important;
+  max-height: calc(100vh - 86px) !important;
+  flex-shrink: 0 !important;
+}
+
+:fullscreen .retro-side-panel,
+.battle-city-container.is-fullscreen .retro-side-panel {
+  height: min(calc(100vh - 86px), calc(100vw - 110px)) !important;
+  max-height: min(calc(100vh - 86px), calc(100vw - 110px)) !important;
+  padding: 4px !important;
+  width: 56px !important;
+}
+
+:fullscreen .cabinet-footer,
+.battle-city-container.is-fullscreen .cabinet-footer {
+  padding: 4px 12px !important;
+  flex-shrink: 0 !important;
+  border-top: 1px solid #334155 !important;
+}
+
+:fullscreen .desktop-hints,
+.battle-city-container.is-fullscreen .desktop-hints {
+  font-size: 0.72rem !important;
 }
 
 .arcade-cabinet {
