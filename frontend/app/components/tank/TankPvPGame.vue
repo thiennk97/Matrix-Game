@@ -317,6 +317,15 @@ let particles: Particle[] = []
 let nextBulletId = 1
 const keysPressed: Record<string, boolean> = {}
 
+// Fixed Timestep Engine (60 simulation ticks per second, identical across all monitors and keyboards)
+const FIXED_STEP = 1000 / 60
+let accumulator = 0
+let lastFrameTime = 0
+let lastMoveSentAt = 0
+let lastSentX = -1
+let lastSentY = -1
+let lastSentDir = -1
+
 // Cinematic Explosions & Screen Shake
 interface FireballPuff {
   dx: number
@@ -555,12 +564,24 @@ onMounted(() => {
     }
   })
 
+  // Reset simulation state and clear all previous match entities
+  bullets = []
+  particles = []
+  explosions.length = 0
+  for (const k in keysPressed) delete keysPressed[k]
+  accumulator = 0
+  lastFrameTime = 0
+  lastDeathAt = 0
+  lastMoveSentAt = 0
+  lastSentX = -1
+  lastSentY = -1
+  lastSentDir = -1
+
   const onFsChange = () => {
     isFullscreen.value = !!document.fullscreenElement
   }
   document.addEventListener('fullscreenchange', onFsChange)
 
-  lastTime = performance.now()
   animationFrameId = requestAnimationFrame(gameLoop)
 })
 
@@ -569,6 +590,15 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
   document.removeEventListener('fullscreenchange', onFsChange)
+
+  bullets = []
+  particles = []
+  explosions.length = 0
+  for (const k in keysPressed) delete keysPressed[k]
+  accumulator = 0
+  lastFrameTime = 0
+  lastDeathAt = 0
+  lastMoveSentAt = 0
 })
 
 function onFsChange() {
@@ -585,6 +615,8 @@ function handleKeyDown(e: KeyboardEvent) {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault()
   }
+  if (e.repeat) return
+
   keysPressed[e.code] = true
 
   if (e.code === 'Space' || e.code === 'KeyJ') {
@@ -697,6 +729,11 @@ function updateLocalTank() {
     dx = myTank.speed
   }
 
+  // Smooth auto-fire when fire button is held down
+  if (keysPressed['Space'] || keysPressed['KeyJ']) {
+    fireBullet()
+  }
+
   if (dx !== 0 || dy !== 0) {
     // Axis snapping
     if (dy !== 0) {
@@ -711,8 +748,19 @@ function updateLocalTank() {
     if (canMoveTo(myTank.x + dx, myTank.y + dy)) {
       myTank.x += dx
       myTank.y += dy
-      sendMove(myTank.x, myTank.y, myTank.dir)
     }
+  }
+
+  // Throttled network sync: ~25Hz (every 40ms) or immediate on direction change
+  const now = Date.now()
+  const dirChanged = myTank.dir !== lastSentDir
+  const posChanged = Math.abs(myTank.x - lastSentX) >= 1 || Math.abs(myTank.y - lastSentY) >= 1
+  if (dirChanged || (posChanged && now - lastMoveSentAt >= 40)) {
+    lastMoveSentAt = now
+    lastSentX = myTank.x
+    lastSentY = myTank.y
+    lastSentDir = myTank.dir
+    sendMove(myTank.x, myTank.y, myTank.dir)
   }
 }
 
@@ -851,11 +899,13 @@ function updateBullets() {
           } else {
             // Give remote tank 1.5s shield and immediately reposition to its spawn point!
             rt.invulnerableUntil = Date.now() + 1500
+            const hitX = rt.x
+            const hitY = rt.y
+            spawnExplosion(hitX + TANK_SIZE / 2, hitY + TANK_SIZE / 2, true)
             const sp = getSpawnForPlayer(rt.id as string)
             rt.x = sp.x
             rt.y = sp.y
             rt.dir = sp.dir
-            spawnExplosion(rt.x + TANK_SIZE / 2, rt.y + TANK_SIZE / 2, true)
             // If local player fired this bullet, notify server immediately of the kill
             if (b.ownerId === myPlayerId.value) {
               sendKill(rt.id as string, myPlayerId.value)
@@ -885,15 +935,13 @@ function handleLocalDeath(killerId: string) {
   sendKill(myTank.id as string, killerId)
 
   const me = currentTankRoom.value?.players.find(p => p.id === myPlayerId.value)
-  const remainingLives = (me?.lives !== undefined) ? me.lives - 1 : 2
-
-  if (remainingLives <= 0) {
+  if (me && (me.lives ?? 3) <= 1) {
     // 0 lives left: eliminate player from active combat
     myTank.x = -999
     myTank.y = -999
     sendMove(-999, -999, 0)
   } else {
-    // Instant respawn beside eagle!
+    // Instant respawn beside eagle with 1.5s protection shield!
     const spawn = getSpawnForPlayer(myPlayerId.value || '')
     myTank.x = spawn.x
     myTank.y = spawn.y
@@ -993,13 +1041,27 @@ function updateParticles() {
   }
 }
 
-// Game Loop
+// Game Loop (Fixed Timestep 60Hz Engine: identical physics & speed across all 60Hz/120Hz/144Hz monitors)
 function gameLoop(time: number) {
   animationFrameId = requestAnimationFrame(gameLoop)
-  updateLocalTank()
-  updateBullets()
-  updateParticles()
-  updateExplosions()
+
+  if (!lastFrameTime) {
+    lastFrameTime = time
+  }
+  let delta = time - lastFrameTime
+  lastFrameTime = time
+
+  if (delta > 250) delta = 250 // Prevent spiral of death
+  accumulator += delta
+
+  while (accumulator >= FIXED_STEP) {
+    updateLocalTank()
+    updateBullets()
+    updateParticles()
+    updateExplosions()
+    accumulator -= FIXED_STEP
+  }
+
   render()
 }
 

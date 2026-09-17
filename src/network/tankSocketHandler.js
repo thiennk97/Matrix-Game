@@ -180,6 +180,7 @@ export function registerTankSocketHandlers(io, socket) {
       const killer = room.players.find(p => p.id === killerId);
       const victim = room.players.find(p => p.id === victimId);
       if (!victim) return;
+      if ((victim.lives ?? 3) <= 0) return;
 
       // Prevent duplicate kill deductions within 1.5s immunity window
       const now = Date.now();

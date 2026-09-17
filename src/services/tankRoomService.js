@@ -63,7 +63,8 @@ export function createTankRoom(playerName, socketId) {
     connected: true,
     lives: 3,
     kills: 0,
-    deaths: 0
+    deaths: 0,
+    lastKilledAt: 0
   };
 
   const room = {
@@ -116,7 +117,8 @@ export function joinTankRoom(roomCode, playerName, socketId) {
     connected: true,
     lives: 3,
     kills: 0,
-    deaths: 0
+    deaths: 0,
+    lastKilledAt: 0
   };
 
   room.players.push(player);
@@ -193,6 +195,7 @@ export function startTankGame(roomCode, socketId) {
     p.lives = 3;
     p.kills = 0;
     p.deaths = 0;
+    p.lastKilledAt = 0;
   });
 
   return { room };
@@ -267,6 +270,7 @@ export function resetTankRematch(roomCode) {
     p.lives = 3;
     p.kills = 0;
     p.deaths = 0;
+    p.lastKilledAt = 0;
     p.ready = p.id === room.hostPlayerId;
   });
 

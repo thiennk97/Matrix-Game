@@ -212,7 +212,9 @@ const enemiesRemaining = ref(20)
 const playerUpgrade = ref(0)
 const stageIntroVisible = ref(false)
 
-// Game Loop State
+// Game Loop State (Fixed Timestep 60Hz Engine)
+const FIXED_TIMESTEP = 1000 / 60
+let accumulator = 0
 let ctx: CanvasRenderingContext2D | null = null
 let animationFrameId: number = 0
 let lastTime = 0
@@ -321,6 +323,15 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('keyup', handleKeyUp)
   document.removeEventListener('fullscreenchange', onFsChange)
+
+  bullets = []
+  particles = []
+  powerUps = []
+  enemies = []
+  spawnPortals = []
+  for (const k in keysPressed) delete keysPressed[k]
+  accumulator = 0
+  lastTime = 0
 })
 
 // --- Initialization ---
@@ -332,6 +343,8 @@ function initStage(s: number) {
   freezeTimer = 0
   enemiesRemaining.value = 20
   totalEnemiesSpawned = 0
+  accumulator = 0
+  lastTime = 0
 
   player = createPlayerTank()
   enemies = []
@@ -556,6 +569,11 @@ function updatePlayer() {
     }
   }
 
+  // Steady auto-fire when fire button is held down
+  if (keysPressed['Space'] || keysPressed['KeyJ']) {
+    firePlayerBullet()
+  }
+
   // Check PowerUp pickups
   for (let i = powerUps.length - 1; i >= 0; i--) {
     const pu = powerUps[i]
@@ -705,7 +723,7 @@ function updateBullets() {
       for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
         const enemy = enemies[eIdx]
         if (checkAABB(bBox, { x: enemy.x, y: enemy.y, w: TANK_SIZE, h: TANK_SIZE })) {
-          enemy.hp--
+          enemy.hp = 0 // 1 hit = dead immediately
           spawnSparks(b.x, b.y, '#ef4444', 6)
           bullets.splice(i, 1)
 
@@ -842,19 +860,27 @@ function updateParticles() {
   }
 }
 
-// --- Main Game Loop ---
+// --- Main Game Loop (Fixed Timestep 60Hz Engine: identical across all 60Hz/120Hz/144Hz screens) ---
 function gameLoop(time: number) {
   animationFrameId = requestAnimationFrame(gameLoop)
-  const dt = time - lastTime
+
+  if (!lastTime) lastTime = time
+  let dt = time - lastTime
   lastTime = time
 
-  if (!isPaused.value && gameState.value === 'playing') {
-    updateSpawning()
-    updatePlayer()
-    updateEnemies()
-    updateBullets()
-    updateShovelTimer()
-    updateParticles()
+  if (dt > 250) dt = 250 // Prevent spiral of death
+  accumulator += dt
+
+  while (accumulator >= FIXED_TIMESTEP) {
+    if (!isPaused.value && gameState.value === 'playing') {
+      updateSpawning()
+      updatePlayer()
+      updateEnemies()
+      updateBullets()
+      updateShovelTimer()
+      updateParticles()
+    }
+    accumulator -= FIXED_TIMESTEP
   }
 
   render()
