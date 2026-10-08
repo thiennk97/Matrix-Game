@@ -1,8 +1,8 @@
 <template>
-  <div class="tank-page-container">
-    <div class="tank-nav-bar">
+  <div class="tank-page" :class="{ 'in-game': inGame }">
+    <div v-if="!inGame" class="tank-nav-bar">
       <NuxtLink to="/" class="btn btn-secondary back-btn">
-        <LucideArrowLeft class="icon" /> QUAY LẠI TRANG CHỦ
+        <LucideArrowLeft class="icon" /> QUAY LẠI CHỌN GAME
       </NuxtLink>
 
       <div class="game-switch-pills">
@@ -18,60 +18,46 @@
       </div>
     </div>
 
-    <!-- Mode Selector: Solo Bot vs 2-Team Online PvP -->
-    <div class="tank-mode-tabs">
-      <button 
-        class="mode-tab-btn" 
-        :class="{ active: activeMode === 'pvp' }"
-        @click="activeMode = 'pvp'"
-      >
-        <LucideSwords class="icon" /> ĐỐI KHÁNG 2 ĐỘI (ONLINE 4P)
-        <span class="hot-badge">PVP</span>
-      </button>
-
-      <button 
-        class="mode-tab-btn" 
-        :class="{ active: activeMode === 'solo' }"
-        @click="activeMode = 'solo'"
-      >
-        <LucideBot class="icon" /> TẬP LUYỆN (SOLO VS BOT)
-      </button>
+    <div v-if="booting || isResuming" class="resuming">
+      <LucideLoader2 class="icon spin" /> Đang khôi phục phòng của bạn...
     </div>
-
-    <!-- MODE 1: SOLO VS BOTS -->
-    <template v-if="activeMode === 'solo'">
-      <div class="tank-hero-header">
-        <h1>CHẾ ĐỘ TẬP LUYỆN</h1>
-        <p class="subtitle">Bắn xe tăng diệt 20 bot AI và bảo vệ đại bàng kinh điển</p>
-      </div>
-      <TankGame />
-    </template>
-
-    <!-- MODE 2: 2-TEAM ONLINE PVP -->
-    <template v-else>
-      <!-- If in-game playing or finished, show Canvas Engine -->
-      <TankPvPGame v-if="currentTankRoom && currentTankRoom.status !== 'LOBBY'" />
-
-      <!-- Otherwise show Lobby / Waiting Room -->
-      <TankLobby v-else />
-    </template>
+    <TankPvPGame v-else-if="inGame" />
+    <TankLobby v-else />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { LucideArrowLeft, LucideGrid3x3, LucideShield, LucideSwords, LucideBot } from '@lucide/vue'
-import TankGame from '~/components/tank/TankGame.vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { LucideArrowLeft, LucideGrid3x3, LucideShield, LucideSwords, LucideLoader2 } from '@lucide/vue'
 import TankLobby from '~/components/tank/TankLobby.vue'
 import TankPvPGame from '~/components/tank/TankPvPGame.vue'
 import { useTankSocket } from '~/composables/useTankSocket'
 
-const { currentTankRoom } = useTankSocket()
-const activeMode = ref<'pvp' | 'solo'>('pvp')
+const { currentTankRoom, isResuming, hasStoredSession, resumeSession, leaveRoom } = useTankSocket()
+
+// Avoid flashing the lobby while a saved session is being restored.
+const booting = ref(!currentTankRoom.value && hasStoredSession())
+
+// FINISHED keeps the arena on screen so players can review the result before leaving.
+const inGame = computed(() => !!currentTankRoom.value && currentTankRoom.value.status !== 'LOBBY')
+
+onMounted(async () => {
+  // Refreshing the tab (or coming back to it) re-attaches to the room/match we were in.
+  try {
+    if (!currentTankRoom.value) await resumeSession()
+  } finally {
+    booting.value = false
+  }
+})
+
+onBeforeUnmount(() => {
+  // Walking away from a waiting room frees the seat; an in-progress match stays resumable.
+  if (currentTankRoom.value?.status === 'LOBBY') void leaveRoom()
+})
 </script>
 
 <style scoped>
-.tank-page-container {
+.tank-page {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -80,11 +66,18 @@ const activeMode = ref<'pvp' | 'solo'>('pvp')
   padding: 0 var(--space-4) var(--space-6);
 }
 
+/* In a match the arena owns the viewport: no page padding, no scrolling. */
+.tank-page.in-game {
+  min-height: 0;
+  padding: var(--space-2) 0 0;
+  overflow: hidden;
+}
+
 .tank-nav-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 960px;
+  max-width: 1200px;
   width: 100%;
   padding: var(--space-4) 0;
 }
@@ -126,98 +119,38 @@ const activeMode = ref<'pvp' | 'solo'>('pvp')
 }
 
 .pill-item.active {
-  background: var(--matchbox-orange);
-  color: white;
-  box-shadow: 0 0 12px rgba(249, 115, 22, 0.4);
+  background: var(--matchbox-cyan);
+  color: #000;
+  font-weight: 800;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
 }
 
-.tank-mode-tabs {
-  display: flex;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  padding: 6px;
-  border-radius: var(--radius-md);
-}
-
-.mode-tab-btn {
+.resuming {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: 1px solid transparent;
+  gap: 10px;
+  margin-top: var(--space-6);
   color: var(--text-muted);
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 800;
-  font-size: 0.82rem;
-  padding: 8px 18px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
+  font-size: 0.9rem;
 }
 
-.mode-tab-btn:hover:not(.active) {
-  color: var(--text-main);
-  background: rgba(255, 255, 255, 0.04);
+.spin {
+  animation: tank-spin 1s linear infinite;
 }
 
-.mode-tab-btn.active {
-  background: var(--matchbox-orange);
-  color: white;
-  box-shadow: 0 0 16px rgba(249, 115, 22, 0.35);
+@keyframes tank-spin {
+  to { transform: rotate(360deg); }
 }
 
-.hot-badge {
-  background: #ef4444;
-  color: white;
-  font-size: 0.65rem;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-
-.tank-hero-header {
-  text-align: center;
-  margin-bottom: var(--space-4);
-}
-
-.tank-hero-header h1 {
-  font-family: 'Orbitron', sans-serif;
-  color: var(--matchbox-gold);
-  font-size: 1.6rem;
-  letter-spacing: 2px;
-  margin-bottom: 4px;
-}
-
-.tank-hero-header .subtitle {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .tank-nav-bar {
     flex-direction: column;
     gap: var(--space-3);
     align-items: stretch;
   }
-  
-  .tank-mode-tabs {
-    flex-direction: column;
-    width: 100%;
-  }
 
-  .mode-tab-btn {
+  .game-switch-pills {
     justify-content: center;
   }
-}
-
-:fullscreen .tank-nav-bar,
-:fullscreen .tank-mode-tabs,
-:fullscreen .tank-hero-header {
-  display: none !important;
-}
-
-:fullscreen {
-  overflow: hidden !important;
 }
 </style>

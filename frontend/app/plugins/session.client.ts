@@ -6,10 +6,13 @@ export default defineNuxtPlugin((nuxtApp) => {
   const store = useGameStore()
   const { connect, emitAck, applyRoomState, loadResultSnapshot } = useSocket()
 
+  // Only Matrix room pages depend on the Matrix session; /tank and /caro restore their own state.
+  const isMatrixRoomRoute = (path: string) => path.startsWith('/room/') || path.startsWith('/preview/')
+
   const abandonSession = async () => {
     localStorage.removeItem('matrix-game-session')
     const route = useRoute()
-    if (route.path !== '/') navigateTo({ path: '/', query: route.query })
+    if (isMatrixRoomRoute(route.path)) navigateTo({ path: '/', query: route.query })
     const roomsRes = await emitAck('list_rooms', {})
     if (roomsRes.ok) {
       store.publicRooms = roomsRes.data.rooms
@@ -69,7 +72,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
     } catch {
       localStorage.removeItem('matrix-game-session')
-      if (useRoute().path !== '/') navigateTo('/')
+      if (isMatrixRoomRoute(useRoute().path)) navigateTo('/')
     } finally {
       store.isRestoring = false
     }

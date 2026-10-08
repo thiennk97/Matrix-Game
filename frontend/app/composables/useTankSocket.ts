@@ -1,17 +1,76 @@
 import { ref } from 'vue'
 import { io, type Socket } from 'socket.io-client'
-import type { TankRoomState, TankRoomSummary, Team } from '~/types/tank'
+import type {
+  TankRoomState,
+  TankRoomSummary,
+  TankSnapshot,
+  TankFullState,
+  TankGameOver,
+  Team
+} from '~/types/tank'
+
+const SESSION_KEY = 'tank-game-session'
+const NAME_KEY = 'tank_player_name'
+
+interface TankSession {
+  roomCode: string
+  playerId: string
+}
 
 let socket: Socket | null = null
 
 const currentTankRoom = ref<TankRoomState | null>(null)
 const myPlayerId = ref<string | null>(null)
 const openTankRooms = ref<TankRoomSummary[]>([])
+const isResuming = ref(false)
+const notice = ref<string | null>(null)
+
+// Match listeners are owned by the game component; the socket-level handlers below forward to them.
+interface MatchHandlers {
+  onFullState?: (state: TankFullState) => void
+  onSnapshot?: (snapshot: TankSnapshot) => void
+  onGameOver?: (data: TankGameOver) => void
+}
+let matchHandlers: MatchHandlers = {}
+let pendingFullState: TankFullState | null = null
+
+function readSession(): TankSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    return parsed?.roomCode && parsed?.playerId ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function saveSession(roomCode: string, playerId: string) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ roomCode, playerId }))
+  } catch {
+    // storage unavailable: resume simply won't work after refresh
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function resetLocalRoom() {
+  currentTankRoom.value = null
+  myPlayerId.value = null
+  clearSession()
+}
 
 export function useTankSocket() {
   function getSocket(): Socket {
     if (!socket) {
-      socket = io()
+      // Skip the HTTP long-polling handshake: go straight to WebSocket (falls back if blocked).
+      socket = io({ transports: ['websocket', 'polling'] })
     }
     setupBaseListeners(socket)
     return socket
@@ -19,78 +78,113 @@ export function useTankSocket() {
 
   function setupBaseListeners(s: Socket) {
     if ((s as any)._hasTankBase) return
-    (s as any)._hasTankBase = true
+    ;(s as any)._hasTankBase = true
 
     s.on('tank_lobby_update', ({ rooms }) => {
       openTankRooms.value = rooms
     })
 
     s.on('tank_room_updated', ({ room }) => {
-      currentTankRoom.value = room
+      if (currentTankRoom.value && room.roomCode === currentTankRoom.value.roomCode) {
+        currentTankRoom.value = room
+      }
     })
 
-    s.on('tank_game_started', ({ room }) => {
+    s.on('tank_game_started', ({ room, state }: { room: TankRoomState; state: TankFullState }) => {
       currentTankRoom.value = room
+      // The game component may not be mounted yet; it pulls the initial state from here on mount.
+      pendingFullState = state
+      matchHandlers.onFullState?.(state)
+    })
+
+    s.on('tank_state_full', (state: TankFullState) => {
+      pendingFullState = state
+      matchHandlers.onFullState?.(state)
+    })
+
+    s.on('tank_snapshot', (snapshot: TankSnapshot) => {
+      matchHandlers.onSnapshot?.(snapshot)
+    })
+
+    s.on('tank_game_over', (data: TankGameOver) => {
+      if (data.room) currentTankRoom.value = data.room
+      matchHandlers.onGameOver?.(data)
     })
 
     s.on('tank_kicked', ({ message }: { message?: string }) => {
-      currentTankRoom.value = null
-      myPlayerId.value = null
-      alert(message || 'Bạn đã bị chủ phòng kích khỏi phòng.')
+      resetLocalRoom()
+      notice.value = message || 'Bạn đã bị chủ phòng mời ra khỏi phòng.'
+    })
+
+    // After a network drop the server assigns a new socket id: re-attach to our seat.
+    s.on('connect', () => {
+      if (!(s as any)._tankConnectedOnce) {
+        ;(s as any)._tankConnectedOnce = true
+        return
+      }
+      void resumeSession()
     })
   }
 
-  function emitAck<T = any>(event: string, payload: any): Promise<{ ok: boolean; data?: T; error?: { message: string } }> {
+  function takePendingFullState() {
+    const state = pendingFullState
+    pendingFullState = null
+    return state
+  }
+
+  function emitAck<T = any>(
+    event: string,
+    payload: any
+  ): Promise<{ ok: boolean; data?: T; error?: { code?: string; message: string } }> {
     return new Promise((resolve) => {
       const s = getSocket()
-      s.emit(event, payload, (res: { ok: boolean; data?: T; error?: { message: string } }) => {
+      s.emit(event, payload, (res: { ok: boolean; data?: T; error?: { code?: string; message: string } }) => {
         resolve(res)
       })
     })
   }
 
-  function initTankListeners(handlers?: {
-    onRemoteMove?: (data: { socketId: string; x: number; y: number; dir: number }) => void
-    onRemoteRespawn?: (data: { playerId: string; x: number; y: number; dir: number }) => void
-    onRemoteShoot?: (data: { x: number; y: number; dir: number; power: number; ownerId: string; ownerTeam: Team }) => void
-    onRemoteTile?: (data: { row: number; col: number; newType: number; hp?: number }) => void
-    onRemoteKill?: (data: { victimId: string; killerId: string; victimLives?: number; room: TankRoomState }) => void
-    onGameOver?: (data: { winner: Team; reason?: 'eagle' | 'lives'; destroyedTeam?: Team; room: TankRoomState }) => void
-  }) {
-    const s = getSocket()
+  function setMatchHandlers(handlers: MatchHandlers) {
+    getSocket()
+    matchHandlers = handlers
+  }
 
-    s.off('tank_remote_move')
-    s.off('tank_remote_respawn')
-    s.off('tank_remote_shoot')
-    s.off('tank_remote_tile')
-    s.off('tank_remote_kill')
-    s.off('tank_game_over')
+  function clearMatchHandlers() {
+    matchHandlers = {}
+  }
 
-    s.on('tank_remote_move', (data) => {
-      handlers?.onRemoteMove?.(data)
-    })
+  function applyRoomResult(res: { ok: boolean; data?: any }, playerName?: string) {
+    if (res.ok && res.data) {
+      currentTankRoom.value = res.data.room
+      myPlayerId.value = res.data.playerId
+      saveSession(res.data.roomCode, res.data.playerId)
+      if (playerName) {
+        try {
+          localStorage.setItem(NAME_KEY, playerName)
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
 
-    s.on('tank_remote_respawn', (data) => {
-      handlers?.onRemoteRespawn?.(data)
-    })
-
-    s.on('tank_remote_shoot', (data) => {
-      handlers?.onRemoteShoot?.(data)
-    })
-
-    s.on('tank_remote_tile', (data) => {
-      handlers?.onRemoteTile?.(data)
-    })
-
-    s.on('tank_remote_kill', (data) => {
-      if (data.room) currentTankRoom.value = data.room
-      handlers?.onRemoteKill?.(data)
-    })
-
-    s.on('tank_game_over', (data) => {
-      if (data.room) currentTankRoom.value = data.room
-      handlers?.onGameOver?.(data)
-    })
+  // Restore the room/match we were in before a refresh or reconnect.
+  async function resumeSession(): Promise<boolean> {
+    const session = readSession()
+    if (!session) return false
+    isResuming.value = true
+    try {
+      const res = await emitAck('tank_resume_room', session)
+      if (res.ok && res.data) {
+        currentTankRoom.value = res.data.room
+        myPlayerId.value = res.data.playerId
+        return true
+      }
+      resetLocalRoom()
+      return false
+    } finally {
+      isResuming.value = false
+    }
   }
 
   async function listRooms() {
@@ -101,137 +195,49 @@ export function useTankSocket() {
   }
 
   async function createRoom(playerName: string) {
-    const res = await emitAck<{ roomCode: string; playerId: string; room: TankRoomState }>('tank_create_room', { playerName })
-    if (res.ok && res.data) {
-      currentTankRoom.value = res.data.room
-      myPlayerId.value = res.data.playerId
-      localStorage.setItem('tank_player_name', playerName)
-    }
+    const res = await emitAck('tank_create_room', { playerName })
+    applyRoomResult(res, playerName)
     return res
   }
 
   async function joinRoom(roomCode: string, playerName: string) {
-    const res = await emitAck<{ roomCode: string; playerId: string; room: TankRoomState }>('tank_join_room', { roomCode, playerName })
-    if (res.ok && res.data) {
-      currentTankRoom.value = res.data.room
-      myPlayerId.value = res.data.playerId
-      localStorage.setItem('tank_player_name', playerName)
-    }
+    const res = await emitAck('tank_join_room', { roomCode, playerName })
+    applyRoomResult(res, playerName)
     return res
   }
 
   async function switchTeam(team: Team) {
-    if (!currentTankRoom.value) return
-    const res = await emitAck<{ room: TankRoomState }>('tank_switch_team', {
-      roomCode: currentTankRoom.value.roomCode,
-      team
-    })
-    if (res.ok && res.data) {
-      currentTankRoom.value = res.data.room
-    }
-    return res
+    return await emitAck<{ room: TankRoomState }>('tank_switch_team', { team })
   }
 
   async function toggleReady() {
-    if (!currentTankRoom.value) return
-    const res = await emitAck<{ room: TankRoomState }>('tank_toggle_ready', {
-      roomCode: currentTankRoom.value.roomCode
-    })
-    if (res.ok && res.data) {
-      currentTankRoom.value = res.data.room
-    }
-    return res
+    return await emitAck<{ room: TankRoomState }>('tank_toggle_ready', {})
   }
 
   async function startGame() {
-    if (!currentTankRoom.value) return
-    return await emitAck<{ room: TankRoomState }>('tank_start_game', {
-      roomCode: currentTankRoom.value.roomCode
-    })
+    return await emitAck<{ room: TankRoomState }>('tank_start_game', {})
   }
 
   async function leaveRoom() {
     await emitAck('tank_leave_room', {})
-    currentTankRoom.value = null
-    myPlayerId.value = null
+    resetLocalRoom()
     await listRooms()
   }
 
-  function sendMove(x: number, y: number, dir: number) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_move', {
-      roomCode: currentTankRoom.value.roomCode,
-      x,
-      y,
-      dir
-    })
-  }
-
-  function sendRespawn(x: number, y: number, dir: number) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_respawn', {
-      roomCode: currentTankRoom.value.roomCode,
-      playerId: myPlayerId.value,
-      x,
-      y,
-      dir
-    })
-  }
-
-  function sendShoot(x: number, y: number, dir: number, power: number, ownerId: string, ownerTeam: Team) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_shoot', {
-      roomCode: currentTankRoom.value.roomCode,
-      x,
-      y,
-      dir,
-      power,
-      ownerId,
-      ownerTeam
-    })
-  }
-
-  function sendTileHit(row: number, col: number, newType: number, hp?: number) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_tile', {
-      roomCode: currentTankRoom.value.roomCode,
-      row,
-      col,
-      newType,
-      hp
-    })
-  }
-
-  function sendEagleHit(destroyedTeam: Team) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_eagle', {
-      roomCode: currentTankRoom.value.roomCode,
-      destroyedTeam
-    })
-  }
-
-  function sendKill(victimId: string, killerId: string) {
-    if (!currentTankRoom.value) return
-    getSocket().emit('tank_sync_kill', {
-      roomCode: currentTankRoom.value.roomCode,
-      victimId,
-      killerId
-    })
+  async function kickPlayer(targetPlayerId: string) {
+    return await emitAck<{ room: TankRoomState }>('tank_kick_player', { targetPlayerId })
   }
 
   async function rematch() {
-    if (!currentTankRoom.value) return
-    return await emitAck<{ room: TankRoomState }>('tank_rematch', {
-      roomCode: currentTankRoom.value.roomCode
-    })
+    return await emitAck<{ room: TankRoomState }>('tank_rematch', {})
   }
 
-  async function kickPlayer(targetPlayerId: string) {
-    if (!currentTankRoom.value) return
-    return await emitAck<{ room: TankRoomState }>('tank_kick_player', {
-      roomCode: currentTankRoom.value.roomCode,
-      targetPlayerId
-    })
+  function sendInput(dir: number, fire: boolean, fireSeq: number) {
+    getSocket().emit('tank_input', { dir, fire, fireSeq })
+  }
+
+  function sendCommand(n: number, dir: number, fire: boolean) {
+    getSocket().emit('tank_cmd', { n, dir, f: fire ? 1 : 0 })
   }
 
   return {
@@ -239,7 +245,13 @@ export function useTankSocket() {
     currentTankRoom,
     myPlayerId,
     openTankRooms,
-    initTankListeners,
+    isResuming,
+    notice,
+    hasStoredSession: () => readSession() !== null,
+    setMatchHandlers,
+    clearMatchHandlers,
+    takePendingFullState,
+    resumeSession,
     listRooms,
     createRoom,
     joinRoom,
@@ -248,12 +260,9 @@ export function useTankSocket() {
     startGame,
     leaveRoom,
     kickPlayer,
-    sendMove,
-    sendRespawn,
-    sendShoot,
-    sendTileHit,
-    sendEagleHit,
-    sendKill,
+    sendInput,
+    sendCommand,
     rematch
   }
 }
+

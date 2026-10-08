@@ -1,267 +1,259 @@
 import * as tankService from '../services/tankRoomService.js';
+import {
+  stepGame,
+  drainEvents,
+  buildSnapshot,
+  buildFullState,
+  setInput,
+  enqueueCommand,
+  clearInput,
+  TICK_RATE
+} from '../core/tankEngine.js';
+
+const TICK_MS = 1000 / TICK_RATE;
+const SNAPSHOT_EVERY_TICKS = 1; // broadcast every tick (60Hz): smoother motion, snapshots are tiny
+const LOOP_INTERVAL_MS = 4;
+const MAX_CATCHUP_MS = 100;
+
+const roomChannel = (roomCode) => `tank_${roomCode}`;
+
+let loopStarted = false;
+
+function broadcastLobby(io) {
+  io.emit('tank_lobby_update', { rooms: tankService.listTankRooms() });
+}
+
+function emitRoomUpdate(io, room) {
+  io.to(roomChannel(room.roomCode)).emit('tank_room_updated', { room: tankService.publicRoom(room) });
+}
+
+function finishMatch(io, room) {
+  const result = tankService.finishTankGame(room);
+  if (!result) return;
+  const game = room.game;
+  const snapshot = buildSnapshot(game, room, drainEvents(game));
+  io.to(roomChannel(room.roomCode)).emit('tank_game_over', {
+    winner: result.winner,
+    reason: result.reason,
+    destroyedTeam: result.destroyedTeam,
+    snapshot,
+    room: tankService.publicRoom(room)
+  });
+  room.game = null;
+  room.loop = null;
+  broadcastLobby(io);
+}
+
+function tickRoom(io, room, now) {
+  const game = room.game;
+  if (!game || room.status !== 'PLAYING') return;
+
+  // Freeze the simulation while nobody is connected; it resumes when someone returns.
+  if (!room.players.some((p) => p.connected)) {
+    room.loop = null;
+    return;
+  }
+  if (!room.loop) room.loop = { last: now, acc: 0 };
+
+  room.loop.acc += Math.min(now - room.loop.last, MAX_CATCHUP_MS);
+  room.loop.last = now;
+
+  while (room.loop.acc >= TICK_MS) {
+    room.loop.acc -= TICK_MS;
+    const result = stepGame(game, room);
+    if (game.tick % SNAPSHOT_EVERY_TICKS === 0 || result) {
+      const snapshot = buildSnapshot(game, room, drainEvents(game));
+      io.to(roomChannel(room.roomCode)).emit('tank_snapshot', snapshot);
+    }
+    if (result) {
+      finishMatch(io, room);
+      return;
+    }
+  }
+}
+
+function startLoop(io) {
+  if (loopStarted) return;
+  loopStarted = true;
+  const timer = setInterval(() => {
+    const now = performance.now();
+    for (const room of tankService.listPlayingRooms()) {
+      try {
+        tickRoom(io, room, now);
+      } catch (err) {
+        console.error(`Tank room ${room.roomCode} tick failed:`, err);
+      }
+    }
+  }, LOOP_INTERVAL_MS);
+  timer.unref?.();
+}
+
+function sendFullState(socket, room) {
+  if (room.status === 'PLAYING' && room.game) {
+    socket.emit('tank_state_full', buildFullState(room.game, room));
+  }
+}
+
+function handleRoomLeft(io, res) {
+  if (!res) return;
+  if (!res.roomDeleted && res.room) {
+    emitRoomUpdate(io, res.room);
+    // A forfeit may have decided the match; the loop picks it up on the next tick.
+  }
+  broadcastLobby(io);
+}
 
 export function registerTankSocketHandlers(io, socket) {
-  function reply(ack, payload) {
+  tankService.setExpiryListener((res) => handleRoomLeft(io, res));
+  startLoop(io);
+
+  const reply = (ack, payload) => {
     if (typeof ack === 'function') ack(payload);
+  };
+  const replyError = (ack, message, code = 'REQUEST_FAILED') => reply(ack, { ok: false, error: { code, message } });
+
+  function validName(playerName) {
+    return typeof playerName === 'string' && playerName.trim().length > 0;
   }
 
-  function replyError(ack, message, code = 'REQUEST_FAILED') {
-    reply(ack, { ok: false, error: { code, message } });
-  }
-
-  function broadcastTankLobby() {
-    io.emit('tank_lobby_update', { rooms: tankService.listOpenTankRooms() });
-  }
-
-  // 1. List rooms
-  socket.on('tank_list_rooms', (_, ack) => {
-    reply(ack, { ok: true, data: { rooms: tankService.listOpenTankRooms() } });
-  });
-
-  // 2. Create room
-  socket.on('tank_create_room', ({ playerName }, ack) => {
-    if (!playerName || typeof playerName !== 'string' || !playerName.trim()) {
-      return replyError(ack, 'Tên người chơi không được để trống.');
-    }
-
-    // Leave any existing tank room first
-    tankService.leaveTankRoom(socket.id);
-
-    const { room, playerId, player } = tankService.createTankRoom(playerName, socket.id);
-    socket.join(`tank_${room.roomCode}`);
-
-    reply(ack, {
-      ok: true,
-      data: {
-        roomCode: room.roomCode,
-        playerId,
-        player,
-        room
-      }
-    });
-
-    broadcastTankLobby();
-  });
-
-  // 3. Join room
-  socket.on('tank_join_room', ({ roomCode, playerName }, ack) => {
-    if (!playerName || typeof playerName !== 'string' || !playerName.trim()) {
-      return replyError(ack, 'Tên người chơi không được để trống.');
-    }
-    if (!roomCode || typeof roomCode !== 'string') {
-      return replyError(ack, 'Mã phòng không hợp lệ.');
-    }
-
-    tankService.leaveTankRoom(socket.id);
-
-    const res = tankService.joinTankRoom(roomCode, playerName, socket.id);
-    if (res.error) {
-      return replyError(ack, res.message, res.error);
-    }
-
-    socket.join(`tank_${res.room.roomCode}`);
-    reply(ack, {
-      ok: true,
-      data: {
-        roomCode: res.room.roomCode,
-        playerId: res.playerId,
-        player: res.player,
-        room: res.room
-      }
-    });
-
-    io.to(`tank_${res.room.roomCode}`).emit('tank_room_updated', { room: res.room });
-    broadcastTankLobby();
-  });
-
-  // 4. Switch team (blue <-> red)
-  socket.on('tank_switch_team', ({ roomCode, team }, ack) => {
-    const res = tankService.switchTankTeam(roomCode, socket.id, team);
-    if (res.error) return replyError(ack, res.message, res.error);
-
-    reply(ack, { ok: true, data: { room: res.room } });
-    io.to(`tank_${res.room.roomCode}`).emit('tank_room_updated', { room: res.room });
-    broadcastTankLobby();
-  });
-
-  // 5. Toggle ready
-  socket.on('tank_toggle_ready', ({ roomCode }, ack) => {
-    const res = tankService.toggleTankReady(roomCode, socket.id);
-    if (res.error) return replyError(ack, res.message, res.error);
-
-    reply(ack, { ok: true, data: { room: res.room } });
-    io.to(`tank_${res.room.roomCode}`).emit('tank_room_updated', { room: res.room });
-  });
-
-  // 6. Start game
-  socket.on('tank_start_game', ({ roomCode }, ack) => {
-    const res = tankService.startTankGame(roomCode, socket.id);
-    if (res.error) return replyError(ack, res.message, res.error);
-
-    reply(ack, { ok: true, data: { room: res.room } });
-    io.to(`tank_${res.room.roomCode}`).emit('tank_game_started', { room: res.room });
-    broadcastTankLobby();
-  });
-
-  // 7. Leave room
-  socket.on('tank_leave_room', (_, ack) => {
+  function leaveCurrent() {
     const res = tankService.leaveTankRoom(socket.id);
     if (res) {
-      socket.leave(`tank_${res.roomCode}`);
-      if (!res.roomDeleted) {
-        io.to(`tank_${res.roomCode}`).emit('tank_room_updated', { room: res.room });
-      }
-      broadcastTankLobby();
+      socket.leave(roomChannel(res.roomCode));
+      handleRoomLeft(io, res);
     }
+  }
+
+  socket.on('tank_list_rooms', (_, ack) => {
+    reply(ack, { ok: true, data: { rooms: tankService.listTankRooms() } });
+  });
+
+  socket.on('tank_create_room', ({ playerName } = {}, ack) => {
+    if (!validName(playerName)) return replyError(ack, 'Tên người chơi không được để trống.');
+    leaveCurrent();
+
+    const created = tankService.createTankRoom(playerName, socket.id);
+    if (created.error) return replyError(ack, created.message, created.error);
+
+    const { room, playerId } = created;
+    socket.join(roomChannel(room.roomCode));
+    reply(ack, { ok: true, data: { roomCode: room.roomCode, playerId, room: tankService.publicRoom(room) } });
+    broadcastLobby(io);
+  });
+
+  socket.on('tank_join_room', ({ roomCode, playerName } = {}, ack) => {
+    if (!validName(playerName)) return replyError(ack, 'Tên người chơi không được để trống.');
+    if (!roomCode || typeof roomCode !== 'string') return replyError(ack, 'Mã phòng không hợp lệ.');
+    leaveCurrent();
+
+    const res = tankService.joinTankRoom(roomCode, playerName, socket.id);
+    if (res.error) return replyError(ack, res.message, res.error);
+
+    socket.join(roomChannel(res.room.roomCode));
+    reply(ack, {
+      ok: true,
+      data: { roomCode: res.room.roomCode, playerId: res.playerId, room: tankService.publicRoom(res.room) }
+    });
+    emitRoomUpdate(io, res.room);
+    broadcastLobby(io);
+  });
+
+  // Page refresh / reconnect: re-attach to the existing seat and replay the live match state.
+  socket.on('tank_resume_room', ({ roomCode, playerId } = {}, ack) => {
+    if (!roomCode || !playerId) return replyError(ack, 'Phiên không hợp lệ.', 'INVALID_SESSION');
+    const res = tankService.resumeTankRoom(roomCode, playerId, socket.id);
+    if (res.error) return replyError(ack, res.message, res.error);
+
+    socket.join(roomChannel(res.room.roomCode));
+    reply(ack, {
+      ok: true,
+      data: { roomCode: res.room.roomCode, playerId, room: tankService.publicRoom(res.room) }
+    });
+    emitRoomUpdate(io, res.room);
+    sendFullState(socket, res.room);
+    broadcastLobby(io);
+  });
+
+  socket.on('tank_switch_team', ({ team } = {}, ack) => {
+    const res = tankService.switchTankTeam(socket.id, team);
+    if (res.error) return replyError(ack, res.message, res.error);
+    reply(ack, { ok: true, data: { room: tankService.publicRoom(res.room) } });
+    emitRoomUpdate(io, res.room);
+    broadcastLobby(io);
+  });
+
+  socket.on('tank_toggle_ready', (_, ack) => {
+    const res = tankService.toggleTankReady(socket.id);
+    if (res.error) return replyError(ack, res.message, res.error);
+    reply(ack, { ok: true, data: { room: tankService.publicRoom(res.room) } });
+    emitRoomUpdate(io, res.room);
+  });
+
+  socket.on('tank_start_game', (_, ack) => {
+    const res = tankService.startTankGame(socket.id);
+    if (res.error) return replyError(ack, res.message, res.error);
+
+    const { room } = res;
+    reply(ack, { ok: true, data: { room: tankService.publicRoom(room) } });
+    io.to(roomChannel(room.roomCode)).emit('tank_game_started', {
+      room: tankService.publicRoom(room),
+      state: buildFullState(room.game, room)
+    });
+    broadcastLobby(io);
+  });
+
+  socket.on('tank_leave_room', (_, ack) => {
+    leaveCurrent();
     reply(ack, { ok: true });
   });
 
-  // 8. Kick player (Host only)
-  socket.on('tank_kick_player', ({ roomCode, targetPlayerId }, ack) => {
-    const res = tankService.kickTankPlayer(roomCode, socket.id, targetPlayerId);
+  socket.on('tank_kick_player', ({ targetPlayerId } = {}, ack) => {
+    const res = tankService.kickTankPlayer(socket.id, targetPlayerId);
     if (res.error) return replyError(ack, res.message, res.error);
 
-    reply(ack, { ok: true, data: { room: res.room } });
-    io.to(`tank_${res.room.roomCode}`).emit('tank_room_updated', { room: res.room });
+    reply(ack, { ok: true, data: { room: tankService.publicRoom(res.room) } });
+    emitRoomUpdate(io, res.room);
 
-    if (res.kickedPlayer?.socketId) {
-      const kickedSocket = io.sockets.sockets.get(res.kickedPlayer.socketId);
-      if (kickedSocket) {
-        kickedSocket.leave(`tank_${res.room.roomCode}`);
-        kickedSocket.emit('tank_kicked', { message: 'Bạn đã bị chủ phòng kích khỏi phòng.' });
-      }
+    const kickedSocket = res.kickedPlayer?.socketId ? io.sockets.sockets.get(res.kickedPlayer.socketId) : null;
+    if (kickedSocket) {
+      kickedSocket.leave(roomChannel(res.room.roomCode));
+      kickedSocket.emit('tank_kicked', { message: 'Bạn đã bị chủ phòng mời ra khỏi phòng.' });
     }
-    broadcastTankLobby();
+    broadcastLobby(io);
   });
 
-  // --- In-Game Synchronization ---
-
-  // Tank Move Relay
-  socket.on('tank_sync_move', ({ roomCode, x, y, dir }) => {
-    socket.to(`tank_${roomCode}`).emit('tank_remote_move', {
-      socketId: socket.id,
-      x,
-      y,
-      dir
-    });
+  // Input only: the client reports which direction is held and whether fire is held.
+  // Positions, bullets, hits and lives are all decided on the server.
+  socket.on('tank_input', (input) => {
+    const session = tankService.getSession(socket.id);
+    if (!session || session.room.status !== 'PLAYING' || !session.room.game) return;
+    setInput(session.room.game, session.player.id, input);
   });
 
-  // Tank Respawn Relay
-  socket.on('tank_sync_respawn', ({ roomCode, playerId, x, y, dir }) => {
-    socket.to(`tank_${roomCode}`).emit('tank_remote_respawn', {
-      playerId,
-      x,
-      y,
-      dir
-    });
+  // One numbered movement command per client step (60Hz); see enqueueCommand in the engine.
+  socket.on('tank_cmd', (cmd) => {
+    const session = tankService.getSession(socket.id);
+    if (!session || session.room.status !== 'PLAYING' || !session.room.game) return;
+    enqueueCommand(session.room.game, session.player.id, cmd?.n, cmd?.dir, cmd?.f);
   });
 
-  // Tank Shoot Relay
-  socket.on('tank_sync_shoot', ({ roomCode, x, y, dir, power, ownerId, ownerTeam }) => {
-    socket.to(`tank_${roomCode}`).emit('tank_remote_shoot', {
-      x,
-      y,
-      dir,
-      power,
-      ownerId,
-      ownerTeam
-    });
-  });
-
-  // Tile Hit Relay
-  socket.on('tank_sync_tile', ({ roomCode, row, col, newType, hp }) => {
-    socket.to(`tank_${roomCode}`).emit('tank_remote_tile', { row, col, newType, hp });
-  });
-
-  // Player Killed Relay
-  socket.on('tank_sync_kill', ({ roomCode, victimId, killerId }) => {
-    const room = tankService.getTankRoom(roomCode);
-    if (room && room.status === 'PLAYING') {
-      const killer = room.players.find(p => p.id === killerId);
-      const victim = room.players.find(p => p.id === victimId);
-      if (!victim) return;
-      if ((victim.lives ?? 3) <= 0) return;
-
-      // Prevent duplicate kill deductions within 1.5s immunity window
-      const now = Date.now();
-      if (victim.lastKilledAt && (now - victim.lastKilledAt < 1500)) {
-        return;
-      }
-      victim.lastKilledAt = now;
-
-      if (killer) killer.kills++;
-      victim.deaths++;
-      victim.lives = Math.max(0, (victim.lives ?? 3) - 1);
-
-      const victimTeam = victim?.team;
-      const teamPlayers = room.players.filter(p => p.team === victimTeam);
-      const teamRemainingLives = teamPlayers.reduce((sum, p) => sum + (p.lives ?? 0), 0);
-
-      // If whole team has 0 lives left -> Game Over!
-      if (victimTeam && teamRemainingLives <= 0) {
-        room.status = 'FINISHED';
-        room.winner = victimTeam === 'blue' ? 'red' : 'blue';
-        if (!room.teamScores) room.teamScores = { blue: 0, red: 0 };
-        room.teamScores[room.winner] = (room.teamScores[room.winner] || 0) + 1;
-        io.to(`tank_${roomCode}`).emit('tank_game_over', {
-          winner: room.winner,
-          reason: 'lives',
-          eliminatedTeam: victimTeam,
-          room
-        });
-        broadcastTankLobby();
-      } else {
-        io.to(`tank_${roomCode}`).emit('tank_remote_kill', {
-          victimId,
-          killerId,
-          victimLives: victim ? victim.lives : 0,
-          room
-        });
-      }
-    }
-  });
-
-  // Eagle Destroyed -> Game Over
-  socket.on('tank_sync_eagle', ({ roomCode, destroyedTeam }) => {
-    const room = tankService.getTankRoom(roomCode);
-    if (room && room.status === 'PLAYING') {
-      room.status = 'FINISHED';
-      // If blue eagle destroyed -> red wins; if red eagle destroyed -> blue wins
-      room.winner = destroyedTeam === 'blue' ? 'red' : 'blue';
-      room.eagles[destroyedTeam].alive = false;
-      if (!room.teamScores) room.teamScores = { blue: 0, red: 0 };
-      room.teamScores[room.winner] = (room.teamScores[room.winner] || 0) + 1;
-
-      io.to(`tank_${roomCode}`).emit('tank_game_over', {
-        winner: room.winner,
-        reason: 'eagle',
-        destroyedTeam,
-        room
-      });
-      broadcastTankLobby();
-    }
-  });
-
-  // Rematch
-  socket.on('tank_rematch', ({ roomCode }, ack) => {
-    const room = tankService.resetTankRematch(roomCode);
-    if (room) {
-      reply(ack, { ok: true, data: { room } });
-      io.to(`tank_${roomCode}`).emit('tank_room_updated', { room });
-      broadcastTankLobby();
-    } else {
-      replyError(ack, 'Không thể đấu lại.');
-    }
+  socket.on('tank_rematch', (_, ack) => {
+    const room = tankService.resetTankRematch(socket.id);
+    if (!room) return replyError(ack, 'Không thể đấu lại.');
+    reply(ack, { ok: true, data: { room: tankService.publicRoom(room) } });
+    emitRoomUpdate(io, room);
+    broadcastLobby(io);
   });
 }
 
 export function handleTankDisconnect(io, socket) {
-  const res = tankService.leaveTankRoom(socket.id);
+  const session = tankService.getSession(socket.id);
+  if (session?.room.game) clearInput(session.room.game, session.player.id);
+
+  const res = tankService.disconnectTankPlayer(socket.id);
   if (res) {
-    socket.leave(`tank_${res.roomCode}`);
-    if (!res.roomDeleted) {
-      io.to(`tank_${res.roomCode}`).emit('tank_room_updated', { room: res.room });
-    }
-    io.emit('tank_lobby_update', { rooms: tankService.listOpenTankRooms() });
+    socket.leave(roomChannel(res.roomCode));
+    emitRoomUpdate(io, res.room);
+    broadcastLobby(io);
   }
 }

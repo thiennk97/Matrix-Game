@@ -22,7 +22,19 @@
         </div>
 
         <div class="card-visual-center">
-          <div class="visual-icon-box matrix-box">🔢</div>
+          <div class="visual-icon-box matrix-box">
+          <svg class="matrix-icon" viewBox="0 0 52 52" aria-hidden="true">
+            <rect x="4" y="4" width="12" height="12" rx="3" fill="#00e5ff" opacity="1" />
+            <rect x="19" y="4" width="12" height="12" rx="3" fill="#ff00ff" opacity="0.55" />
+            <rect x="34" y="4" width="12" height="12" rx="3" fill="#ffee00" opacity="0.9" />
+            <rect x="4" y="19" width="12" height="12" rx="3" fill="#ffee00" opacity="0.6" />
+            <rect x="19" y="19" width="12" height="12" rx="3" fill="#00e5ff" opacity="1" />
+            <rect x="34" y="19" width="12" height="12" rx="3" fill="#ff3c00" opacity="0.85" />
+            <rect x="4" y="34" width="12" height="12" rx="3" fill="#ff3c00" opacity="0.9" />
+            <rect x="19" y="34" width="12" height="12" rx="3" fill="#ffee00" opacity="0.7" />
+            <rect x="34" y="34" width="12" height="12" rx="3" fill="#00e5ff" opacity="0.55" />
+          </svg>
+        </div>
           <h2 class="game-title">MATRIX BATTLE</h2>
           <p class="game-summary">
             Đấu trí xếp số theo hàng, cột và đường chéo trên bàn cờ 9x9. Tính điểm combo liên hoàn, phòng chơi Redis hỗ trợ kết nối lại không mất ván.
@@ -46,12 +58,18 @@
       <NuxtLink to="/tank" class="portal-game-card tank-card">
         <div class="card-glow-bg tank-glow"></div>
         <div class="card-header-row">
-          <div class="game-badge tank-badge">ĐỐI KHÁNG 2 ĐỘI & SOLO</div>
+          <div class="game-badge tank-badge">ĐỐI KHÁNG 2 ĐỘI</div>
           <span class="player-capacity">1–4 Người</span>
         </div>
 
         <div class="card-visual-center">
-          <div class="visual-icon-box tank-box">🛡️</div>
+          <div class="visual-icon-box tank-box">
+            <div class="tank-duel" aria-hidden="true">
+              <TankIcon team="blue" :size="36" class="duel-tank blue" />
+              <span class="duel-spark"></span>
+              <TankIcon team="red" :size="36" class="duel-tank red" />
+            </div>
+          </div>
           <h2 class="game-title">BATTLE CITY 1990</h2>
           <p class="game-summary">
             Huyền thoại xe tăng máy bấm đầu đĩa DVD nay nâng cấp thành đối kháng 2 đội (Đội Xanh vs Đội Đỏ). Bảo vệ đại bàng nhà mình và bắn nổ đại bàng đối phương!
@@ -80,7 +98,25 @@
         </div>
 
         <div class="card-visual-center">
-          <div class="visual-icon-box caro-box">⚔️</div>
+          <div class="visual-icon-box caro-box">
+            <svg class="caro-icon" viewBox="0 0 52 52" aria-hidden="true">
+              <g stroke="#34d399" stroke-opacity="0.45" stroke-width="1.4" stroke-linecap="round">
+                <line x1="8" y1="14" x2="44" y2="14" />
+                <line x1="8" y1="26" x2="44" y2="26" />
+                <line x1="8" y1="38" x2="44" y2="38" />
+                <line x1="14" y1="8" x2="14" y2="44" />
+                <line x1="26" y1="8" x2="26" y2="44" />
+                <line x1="38" y1="8" x2="38" y2="44" />
+              </g>
+              <circle cx="14" cy="14" r="5" fill="#f8fafc" />
+              <circle cx="26" cy="26" r="5" fill="#f8fafc" />
+              <circle cx="38" cy="38" r="5" fill="#f8fafc" />
+              <circle cx="26" cy="14" r="5" fill="#0b1120" stroke="#34d399" stroke-width="1.6" />
+              <circle cx="38" cy="26" r="5" fill="#0b1120" stroke="#34d399" stroke-width="1.6" />
+              <circle cx="14" cy="38" r="5" fill="#0b1120" stroke="#34d399" stroke-width="1.6" />
+              <line x1="11" y1="11" x2="41" y2="41" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="1 4" />
+            </svg>
+          </div>
           <h2 class="game-title">CỜ CARO ONLINE</h2>
           <p class="game-summary">
             Đấu trí Gomoku 5 quân liên tiếp thời gian thực. Đồ họa hiệu ứng Neon/Zen obsidian, hỗ trợ luật chặn 2 đầu kinh điển và phòng đấu online 2 người!
@@ -277,6 +313,41 @@ import { LucideArrowRight } from '@lucide/vue'
   font-size: 2.8rem;
   margin-bottom: var(--space-3);
   transition: transform 0.3s;
+}
+
+.matrix-icon {
+  width: 3.6rem;
+  height: 3.6rem;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.35));
+}
+
+.caro-icon {
+  width: 3.6rem;
+  height: 3.6rem;
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.35));
+}
+
+.tank-duel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  filter: drop-shadow(0 0 6px rgba(249, 115, 22, 0.3));
+}
+
+.duel-tank.blue {
+  transform: rotate(90deg);
+}
+
+.duel-tank.red {
+  transform: rotate(-90deg);
+}
+
+.duel-spark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fcd34d;
+  box-shadow: 0 0 8px 3px rgba(252, 211, 77, 0.7);
 }
 
 .portal-game-card:hover .visual-icon-box {
