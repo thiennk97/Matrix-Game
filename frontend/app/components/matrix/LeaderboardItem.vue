@@ -9,6 +9,14 @@
         <span v-else>#{{ rank + 1 }}</span>
       </span>
       <span class="rank-name-text" :style="{ color: playerColor }">{{ player.name }}</span>
+      <span
+        v-if="player.top1Wins && player.top1Wins > 0"
+        class="player-top1-badge"
+        :title="`Đã đạt Top 1 ${player.top1Wins} lần trong phòng này`"
+      >
+        <LucideCrown class="top1-mini-crown" />
+        <span>{{ player.top1Wins }}</span>
+      </span>
     </div>
     <div class="match-score">
       <span class="match-score-value">{{ player.score }}</span>
@@ -74,6 +82,28 @@ const playerColor = computed(() => getPlayerColor(props.player.seatIndex))
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.player-top1-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(252, 211, 77, 0.12);
+  border: 1px solid rgba(252, 211, 77, 0.4);
+  color: var(--matchbox-gold);
+  border-radius: 12px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.top1-mini-crown {
+  width: 12px;
+  height: 12px;
+  color: var(--matchbox-gold);
 }
 
 .rank-num {

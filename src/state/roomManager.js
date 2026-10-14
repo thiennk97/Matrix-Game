@@ -14,6 +14,7 @@ function getPublicPlayers(room) {
     ready: p.ready,
     connected: p.connected,
     score: p.score,
+    top1Wins: p.top1Wins || 0,
     hasPlacedThisRound: p.hasPlacedThisRound,
     board: p.board,
     matchedLines: p.matchedLines
@@ -35,7 +36,10 @@ function getBaseState(room) {
     timeLeft: calculateTimeLeft(room),
     turnEndsAt: room.turnEndsAt || null,
     turnTimeLimit: room.turnTimeLimit,
-    stateVersion: room.stateVersion
+    stateVersion: room.stateVersion,
+    matchCount: room.matchCount || 0,
+    top1Stats: room.top1Stats || [],
+    matchHistory: room.matchHistory || []
   };
 }
 
@@ -231,12 +235,64 @@ function autoPlaceMissingMoves(room) {
   preferredSlots.clear();
 }
 
+function recordTop1Stats(room) {
+  room.matchCount = (room.matchCount || 0) + 1;
+  room.top1Stats = room.top1Stats || [];
+  room.matchHistory = room.matchHistory || [];
+
+  const activePlayers = room.players.filter((p) => !p.abandoned);
+  if (activePlayers.length === 0) return;
+
+  const maxScore = Math.max(...activePlayers.map((p) => p.score || 0));
+  const topPlayers = activePlayers.filter((p) => (p.score || 0) === maxScore);
+
+  topPlayers.forEach((winner) => {
+    winner.top1Wins = (winner.top1Wins || 0) + 1;
+
+    let stat = room.top1Stats.find((s) => s.id === winner.id || (s.name && s.name === winner.name));
+    if (!stat) {
+      stat = {
+        id: winner.id,
+        name: winner.name,
+        seatIndex: winner.seatIndex,
+        top1Wins: 0,
+        highestScore: winner.score || 0,
+        lastWonRound: room.matchCount
+      };
+      room.top1Stats.push(stat);
+    }
+    stat.id = winner.id;
+    stat.name = winner.name;
+    stat.seatIndex = winner.seatIndex;
+    stat.top1Wins += 1;
+    stat.highestScore = Math.max(stat.highestScore, winner.score || 0);
+    stat.lastWonRound = room.matchCount;
+  });
+
+  room.top1Stats.sort((a, b) => b.top1Wins - a.top1Wins || b.highestScore - a.highestScore);
+
+  room.matchHistory.unshift({
+    round: room.matchCount,
+    endedAt: Date.now(),
+    topScore: maxScore,
+    winners: topPlayers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      seatIndex: p.seatIndex,
+      score: p.score || 0
+    }))
+  });
+}
+
 async function endGame(io, roomCode, room) {
   stopTimer(roomCode);
   room.status = ROOM_STATUS.FINISHED;
   room.turnEndsAt = null;
   room.remainingTurnMs = null;
   room.stateVersion++;
+
+  recordTop1Stats(room);
+
   await saveRoom(room);
 
   emitRoomState(io, room);

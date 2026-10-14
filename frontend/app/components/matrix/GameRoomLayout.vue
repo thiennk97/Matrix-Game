@@ -6,10 +6,32 @@
 
     <div class="main-layout">
       <aside class="panel-section leaderboard-panel">
-        <div class="panel-title">
-          <span><LucideTrophy class="icon" /> Bảng Xếp Hạng</span>
+        <div class="leaderboard-tab-nav">
+          <button
+            class="lb-nav-btn"
+            :class="{ active: activeLeaderboardTab === 'current' }"
+            @click="activeLeaderboardTab = 'current'"
+          >
+            <LucideTrophy class="icon" />
+            <span>BXH Ván</span>
+          </button>
+          <button
+            class="lb-nav-btn"
+            :class="{ active: activeLeaderboardTab === 'top1' }"
+            @click="activeLeaderboardTab = 'top1'"
+          >
+            <LucideCrown class="icon crown-icon" />
+            <span>Top 1 Phòng</span>
+            <span v-if="roomMatchCount > 0" class="nav-count-badge">{{ roomMatchCount }}</span>
+          </button>
         </div>
-        <TransitionGroup tag="div" name="rank" class="match-list">
+
+        <TransitionGroup
+          v-if="activeLeaderboardTab === 'current'"
+          tag="div"
+          name="rank"
+          class="match-list"
+        >
           <LeaderboardItem
             v-for="(player, idx) in sortedPlayers"
             :key="player.id"
@@ -17,6 +39,13 @@
             :rank="idx"
           />
         </TransitionGroup>
+
+        <Top1Panel
+          v-else
+          :match-count="roomMatchCount"
+          :top1-stats="roomTop1Stats"
+          :match-history="roomMatchHistory"
+        />
       </aside>
 
       <div class="game-area">
@@ -48,10 +77,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useGameStore } from '~/stores/game'
 import { useRoomStatus } from '~/composables/useRoomStatus'
-import { LucideTrophy, LucidePauseCircle } from '@lucide/vue'
+import { LucideTrophy, LucidePauseCircle, LucideCrown } from '@lucide/vue'
+import Top1Panel from '~/components/matrix/Top1Panel.vue'
 import type { Player } from '~/types'
 
 const props = defineProps<{
@@ -61,6 +91,12 @@ const props = defineProps<{
 
 const store = useGameStore()
 const { isLobby, isPlaying, isPaused } = useRoomStatus()
+
+const activeLeaderboardTab = ref<'current' | 'top1'>('current')
+
+const roomMatchCount = computed(() => store.localRoomState?.matchCount || 0)
+const roomTop1Stats = computed(() => store.localRoomState?.top1Stats || [])
+const roomMatchHistory = computed(() => store.localRoomState?.matchHistory || [])
 
 const victoryPlayers = computed(() => {
   const source = store.frozenResults ?? props.sortedPlayers
@@ -123,6 +159,61 @@ const victoryPlayers = computed(() => {
 .rank-leave-active {
   position: absolute;
   width: 100%;
+}
+
+.leaderboard-tab-nav {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  gap: 4px;
+  margin-bottom: var(--space-3);
+}
+
+.lb-nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.lb-nav-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.lb-nav-btn.active {
+  background: rgba(249, 115, 22, 0.16);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
+}
+
+.crown-icon {
+  color: var(--matchbox-gold);
+}
+
+.nav-count-badge {
+  background: var(--matchbox-orange);
+  color: #fff;
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.4);
 }
 
 .leaderboard-panel .panel-title {

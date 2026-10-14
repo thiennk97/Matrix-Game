@@ -8,6 +8,9 @@
         <LucideTrophy class="icon" />
         <span class="modal-title-text">{{ winnerText }}</span>
       </div>
+      <div v-if="store.localRoomState?.matchCount" class="modal-match-counter">
+        VÁN ĐẤU THỨ {{ store.localRoomState.matchCount }} CỦA PHÒNG
+      </div>
       <div class="modal-scores">
         <div 
           v-for="(p, i) in players" 
@@ -21,7 +24,12 @@
             <LucideMedal v-else class="icon rank-medal" :class="`medal-${getTier(i)}`" />
             <span>#{{ i + 1 }}</span>
           </div>
-          <div class="rank-name">{{ p.name }}</div>
+          <div class="rank-name">
+            <span>{{ p.name }}</span>
+            <span v-if="p.top1Wins" class="modal-top1-tag" :title="`Đã đạt Top 1 ${p.top1Wins} lần trong phòng này`">
+              👑 {{ p.top1Wins }}
+            </span>
+          </div>
           <div class="rank-score"><strong>{{ p.score }}</strong><span>PTS</span></div>
         </div>
       </div>
@@ -205,6 +213,36 @@ const restartGame = async () => {
   color: var(--matchbox-gold);
   filter: drop-shadow(0 0 12px rgba(250, 204, 21, 0.65));
   flex-shrink: 0;
+}
+
+.modal-match-counter {
+  text-align: center;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--matchbox-orange);
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  padding: 3px 12px;
+  border-radius: 12px;
+  margin: -10px auto 14px;
+  width: fit-content;
+}
+
+.modal-top1-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(252, 211, 77, 0.15);
+  border: 1px solid rgba(252, 211, 77, 0.4);
+  color: var(--matchbox-gold);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-left: 6px;
+  font-family: 'Fira Code', monospace;
+  vertical-align: middle;
 }
 
 @keyframes victoryTitleIn {

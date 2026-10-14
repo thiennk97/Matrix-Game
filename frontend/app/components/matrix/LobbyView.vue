@@ -42,6 +42,14 @@
                 />
                 <span v-if="getPlayerAt(idx - 1)?.id === store.myPlayerId" class="you-tag">(Bạn)</span>
                 <span v-if="!getPlayerAt(idx - 1)?.connected" class="disconnected-tag">(Mất kết nối)</span>
+                <span
+                  v-if="getPlayerAt(idx - 1)?.top1Wins"
+                  class="slot-top1-badge"
+                  :title="`Đã đạt Top 1 ${getPlayerAt(idx - 1)!.top1Wins} lần trong phòng này`"
+                >
+                  <LucideCrown class="slot-crown-icon" />
+                  <span>{{ getPlayerAt(idx - 1)!.top1Wins }}</span>
+                </span>
               </div>
               <div 
                 v-if="getPlayerAt(idx - 1)?.id !== store.localRoomState?.hostPlayerId"
@@ -402,6 +410,28 @@ const startGame = async () => {
   color: var(--matchbox-red);
   font-size: 0.75rem;
   margin-left: 8px;
+}
+
+.slot-top1-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(252, 211, 77, 0.12);
+  border: 1px solid rgba(252, 211, 77, 0.4);
+  color: var(--matchbox-gold);
+  border-radius: 12px;
+  padding: 1px 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  margin-left: 6px;
+  line-height: 1.2;
+}
+
+.slot-crown-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--matchbox-gold);
 }
 
 .ready-tag {

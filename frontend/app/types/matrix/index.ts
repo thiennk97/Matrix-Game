@@ -8,11 +8,35 @@ export interface Player {
   ready: boolean
   connected: boolean
   abandoned?: boolean
+  top1Wins?: number
   board: (number | null)[][]
   matchedLines?: any[]
   hasPlacedThisRound?: boolean
   currentPiece?: number[]
   hoverType?: 'horizontal' | 'vertical'
+}
+
+export interface Top1Record {
+  id: string
+  name: string
+  seatIndex: number
+  top1Wins: number
+  highestScore: number
+  lastWonRound: number
+}
+
+export interface MatchHistoryWinner {
+  id: string
+  name: string
+  seatIndex: number
+  score: number
+}
+
+export interface MatchHistoryEntry {
+  round: number
+  endedAt: number
+  topScore: number
+  winners: MatchHistoryWinner[]
 }
 
 export interface RoomState {
@@ -26,6 +50,9 @@ export interface RoomState {
   timeLeft: number
   turnEndsAt?: number | null
   turnTimeLimit: number
+  matchCount?: number
+  top1Stats?: Top1Record[]
+  matchHistory?: MatchHistoryEntry[]
 }
 
 export interface PublicRoom {

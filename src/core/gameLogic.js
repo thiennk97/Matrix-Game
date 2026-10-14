@@ -36,6 +36,7 @@ function createPlayerState(id, socketId, name, seatIndex) {
     ready: false,
     board: createEmptyBoard(),
     score: 0,
+    top1Wins: 0,
     hasPlacedThisRound: false,
     matchedLines: [],
     joinedAt: Date.now(),
@@ -58,7 +59,10 @@ function createNewRoomState(roomCode, hostPlayerId) {
     remainingTurnMs: null,
     createdAt: now,
     updatedAt: now,
-    stateVersion: 1
+    stateVersion: 1,
+    matchCount: 0,
+    top1Stats: [],
+    matchHistory: []
   };
 }
 

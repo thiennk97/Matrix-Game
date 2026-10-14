@@ -9,7 +9,8 @@ function resetPlayerForLobby(player, hostPlayerId) {
     hasPlacedThisRound: false,
     matchedLines: [],
     ready: player.id === hostPlayerId,
-    score: 0
+    score: 0,
+    top1Wins: player.top1Wins || 0
   };
 }
 
