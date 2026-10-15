@@ -71,8 +71,8 @@ export interface SnapBullet {
 export type SnapEvent =
   | { type: 'shoot'; team: Team; ownerId: string }
   | { type: 'tile'; r: number; c: number; tile: number; hp: number }
-  | { type: 'brick'; x: number; y: number }
-  | { type: 'steel'; x: number; y: number }
+  | { type: 'brick'; x: number; y: number; ownerId?: string }
+  | { type: 'steel'; x: number; y: number; ownerId?: string }
   | { type: 'shield'; x: number; y: number }
   | { type: 'clash'; x: number; y: number }
   | { type: 'fort_hit'; x: number; y: number; team: Team }

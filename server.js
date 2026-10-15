@@ -8,6 +8,8 @@ import { connectRedis, disconnectRedis } from './src/config/redis.js';
 import { cleanupStaleRoomsOnStartup } from './src/services/roomService.js';
 import { restoreTankRooms } from './src/services/tankRoomService.js';
 
+import { setupColyseus } from './src/colyseus/setupColyseus.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
 
@@ -19,18 +21,18 @@ function logStartupBanner(port) {
 }
 
 const app = express();
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 const server = http.createServer(app);
 const io = new Server(server);
 registerSocketHandlers(io);
 
 async function startServer() {
   try {
+    await setupColyseus(app, server);
+    app.use(express.static(path.join(__dirname, 'public')));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
+
     await connectRedis();
     await cleanupStaleRoomsOnStartup();
     await restoreTankRooms();

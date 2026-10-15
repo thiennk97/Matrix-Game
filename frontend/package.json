@@ -13,6 +13,7 @@
     "lint": "eslint . --fix"
   },
   "dependencies": {
+    "@colyseus/sdk": "^0.18.5",
     "@lucide/vue": "latest",
     "@pinia/nuxt": "latest",
     "nuxt": "latest",

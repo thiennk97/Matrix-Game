@@ -231,8 +231,8 @@ const MAX_LIVES = 3
 const TICK_MS = 1000 / 60
 const BULLET_STEP = 4.2 // px per server tick (matches the engine)
 const BULLET_DIRS: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]]
-const MIN_INTERP_DELAY_TICKS = 3 // render slightly behind the newest snapshot (50ms) to stay smooth
-const MAX_INTERP_DELAY_TICKS = 9 // upper bound when the network is jittery
+const MIN_INTERP_DELAY_TICKS = 1 // 1 tick (16.6ms) delay: ultra-low latency with 60Hz Colyseus deltas
+const MAX_INTERP_DELAY_TICKS = 4 // upper bound for network jitter
 const INTERP_DELAY_TICKS = MIN_INTERP_DELAY_TICKS // initial value; the live one is interpDelay
 const TELEPORT_DISTANCE = 40
 
@@ -416,6 +416,17 @@ function pushSnapshot(snapshot: TankSnapshot) {
   newestSnap = snapshot
   reconcile(snapshot)
 
+  // Immediately apply world tile & eagle changes as soon as snapshot arrives over WebSocket
+  for (const ev of snapshot.events as SnapEvent[]) {
+    if (ev.type === 'tile') {
+      if (map[ev.r]) map[ev.r]![ev.c] = ev.tile
+      if (ev.tile === TILE_FORT_BLUE || ev.tile === TILE_FORT_RED) wallHp.set(`${ev.r}_${ev.c}`, ev.hp)
+      else wallHp.delete(`${ev.r}_${ev.c}`)
+    } else if (ev.type === 'eagle') {
+      eagleAlive.value = { ...eagleAlive.value, [ev.team]: false }
+    }
+  }
+
   // sample = local arrival time minus server time. Lower means a faster packet, so follow
   // improvements quickly and drift upward slowly; that keeps the estimate close to true latency.
   const sample = performance.now() - snapshot.tick * TICK_MS
@@ -437,7 +448,15 @@ function pushSnapshot(snapshot: TankSnapshot) {
 
 function onGameOver(data: TankGameOver) {
   pendingResult = data
-  pushSnapshot(data.snapshot)
+  if (data.snapshot) {
+    pushSnapshot(data.snapshot)
+  }
+  winner.value = data.winner
+  gameOverReason.value = data.reason
+  finished.value = true
+  countdown.value = 0
+  clearInput()
+  tankAudio.gameOver()
 }
 
 // ---- Event effects --------------------------------------------------------
@@ -517,12 +536,16 @@ function playEffect(ev: SnapEvent) {
       if (ev.ownerId !== myPlayerId.value) tankAudio.shoot()
       break
     case 'brick':
-      tankAudio.explodeSmall()
-      spawnSparks(ev.x, ev.y, '#f97316', 8)
+      if (ev.ownerId !== myPlayerId.value) {
+        tankAudio.explodeSmall()
+        spawnSparks(ev.x, ev.y, '#f97316', 8)
+      }
       break
     case 'steel':
-      tankAudio.hitSteel()
-      spawnSparks(ev.x, ev.y, '#fcd34d', 6)
+      if (ev.ownerId !== myPlayerId.value) {
+        tankAudio.hitSteel()
+        spawnSparks(ev.x, ev.y, '#fcd34d', 6)
+      }
       break
     case 'shield':
       tankAudio.hitSteel()
@@ -736,7 +759,32 @@ function stepProxies(snap: TankSnapshot) {
   for (let i = proxies.length - 1; i >= 0; i--) {
     const p = proxies[i]!
     const serverDone = !!me && me.ack >= p.n && !live.has(p.n)
-    if (serverDone || !stepProxyBullet(p, map)) proxies.splice(i, 1)
+    if (serverDone) {
+      proxies.splice(i, 1)
+      continue
+    }
+
+    const canMove = stepProxyBullet(p, map)
+    if (!canMove) {
+      // Proxy bullet hit an obstacle: predict destruction and impact immediately (0ms delay)
+      const cx = p.x + 3
+      const cy = p.y + 3
+      const col = Math.floor(cx / TILE_SIZE)
+      const row = Math.floor(cy / TILE_SIZE)
+      const tile = map[row]?.[col]
+      if (tile === TILE_BRICK) {
+        if (map[row]) map[row]![col] = TILE_EMPTY
+        tankAudio.explodeSmall()
+        spawnSparks(col * TILE_SIZE + 8, row * TILE_SIZE + 8, '#f97316', 10)
+      } else if (tile === TILE_STEEL) {
+        tankAudio.hitSteel()
+        spawnSparks(cx, cy, '#fcd34d', 6)
+      } else if (tile === TILE_FORT_BLUE || tile === TILE_FORT_RED) {
+        tankAudio.hitSteel()
+        spawnSparks(cx, cy, tile === TILE_FORT_BLUE ? '#38bdf8' : '#ef4444', 8)
+      }
+      proxies.splice(i, 1)
+    }
   }
 }
 
@@ -810,7 +858,7 @@ function advanceTimeline(nowMs: number) {
   const current = snaps[0]!
   updateHud(current)
 
-  if (pendingResult && renderTick >= pendingResult.snapshot.tick) {
+  if (pendingResult && (!pendingResult.snapshot || renderTick >= pendingResult.snapshot.tick)) {
     const r = pendingResult
     pendingResult = null
     winner.value = r.winner
