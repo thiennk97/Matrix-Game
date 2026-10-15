@@ -45,11 +45,11 @@
             </div>
           </Transition>
 
-          <div v-if="isEliminated && !finished" class="badge-spectator">
-            <LucideEye class="icon" /> ĐANG QUAN SÁT
+          <div v-if="isEliminated && !finished" class="badge-spectator dead">
+            <LucideSkull class="icon" /> BẠN ĐÃ CHẾT — ĐANG QUAN SÁT ĐỒNG ĐỘI
           </div>
           <div v-else-if="isRespawning && !finished" class="badge-spectator respawn">
-            <LucideRefreshCw class="icon" /> ĐANG HỒI SINH
+            <LucideRefreshCw class="icon spin" /> ĐANG HỒI SINH (CÒN {{ myRow?.lives ?? 0 }} MẠNG)
           </div>
 
           <div v-if="finished && resultDismissed" class="result-bar">
@@ -97,7 +97,7 @@
     </div>
 
     <!-- Touch controls -->
-    <div v-if="showTouchControls" class="touch-controls">
+    <div v-if="showTouchControls && !isEliminated" class="touch-controls">
       <div class="dpad">
         <button class="dpad-btn up" @pointerdown.prevent="touchDir(0)" @pointerup.prevent="touchDirEnd(0)" @pointerleave="touchDirEnd(0)" @pointercancel="touchDirEnd(0)"><LucideArrowUp class="icon" /></button>
         <button class="dpad-btn left" @pointerdown.prevent="touchDir(3)" @pointerup.prevent="touchDirEnd(3)" @pointerleave="touchDirEnd(3)" @pointercancel="touchDirEnd(3)"><LucideArrowLeft class="icon" /></button>
@@ -231,8 +231,8 @@ const MAX_LIVES = 3
 const TICK_MS = 1000 / 60
 const BULLET_STEP = 4.2 // px per server tick (matches the engine)
 const BULLET_DIRS: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]]
-const MIN_INTERP_DELAY_TICKS = 3 // render slightly behind the newest snapshot (50ms) to stay smooth
-const MAX_INTERP_DELAY_TICKS = 9 // upper bound when the network is jittery
+const MIN_INTERP_DELAY_TICKS = 1 // 1 tick (16.6ms) delay: ultra-low latency with 60Hz Colyseus deltas
+const MAX_INTERP_DELAY_TICKS = 4 // upper bound for network jitter
 const INTERP_DELAY_TICKS = MIN_INTERP_DELAY_TICKS // initial value; the live one is interpDelay
 const TELEPORT_DISTANCE = 40
 
@@ -416,6 +416,17 @@ function pushSnapshot(snapshot: TankSnapshot) {
   newestSnap = snapshot
   reconcile(snapshot)
 
+  // Immediately apply world tile & eagle changes as soon as snapshot arrives over WebSocket
+  for (const ev of snapshot.events as SnapEvent[]) {
+    if (ev.type === 'tile') {
+      if (map[ev.r]) map[ev.r]![ev.c] = ev.tile
+      if (ev.tile === TILE_FORT_BLUE || ev.tile === TILE_FORT_RED) wallHp.set(`${ev.r}_${ev.c}`, ev.hp)
+      else wallHp.delete(`${ev.r}_${ev.c}`)
+    } else if (ev.type === 'eagle') {
+      eagleAlive.value = { ...eagleAlive.value, [ev.team]: false }
+    }
+  }
+
   // sample = local arrival time minus server time. Lower means a faster packet, so follow
   // improvements quickly and drift upward slowly; that keeps the estimate close to true latency.
   const sample = performance.now() - snapshot.tick * TICK_MS
@@ -437,7 +448,15 @@ function pushSnapshot(snapshot: TankSnapshot) {
 
 function onGameOver(data: TankGameOver) {
   pendingResult = data
-  pushSnapshot(data.snapshot)
+  if (data.snapshot) {
+    pushSnapshot(data.snapshot)
+  }
+  winner.value = data.winner
+  gameOverReason.value = data.reason
+  finished.value = true
+  countdown.value = 0
+  clearInput()
+  tankAudio.gameOver()
 }
 
 // ---- Event effects --------------------------------------------------------
@@ -517,12 +536,16 @@ function playEffect(ev: SnapEvent) {
       if (ev.ownerId !== myPlayerId.value) tankAudio.shoot()
       break
     case 'brick':
-      tankAudio.explodeSmall()
-      spawnSparks(ev.x, ev.y, '#f97316', 8)
+      if (ev.ownerId !== myPlayerId.value) {
+        tankAudio.explodeSmall()
+        spawnSparks(ev.x, ev.y, '#f97316', 8)
+      }
       break
     case 'steel':
-      tankAudio.hitSteel()
-      spawnSparks(ev.x, ev.y, '#fcd34d', 6)
+      if (ev.ownerId !== myPlayerId.value) {
+        tankAudio.hitSteel()
+        spawnSparks(ev.x, ev.y, '#fcd34d', 6)
+      }
       break
     case 'shield':
       tankAudio.hitSteel()
@@ -617,7 +640,7 @@ function handleKeyDown(e: KeyboardEvent) {
   }
   const target = e.target as HTMLElement | null
   if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return
-  if (finished.value) return
+  if (finished.value || isEliminated.value) return
 
   const dir = KEY_DIRS[e.code]
   if (dir !== undefined) {
@@ -736,7 +759,32 @@ function stepProxies(snap: TankSnapshot) {
   for (let i = proxies.length - 1; i >= 0; i--) {
     const p = proxies[i]!
     const serverDone = !!me && me.ack >= p.n && !live.has(p.n)
-    if (serverDone || !stepProxyBullet(p, map)) proxies.splice(i, 1)
+    if (serverDone) {
+      proxies.splice(i, 1)
+      continue
+    }
+
+    const canMove = stepProxyBullet(p, map)
+    if (!canMove) {
+      // Proxy bullet hit an obstacle: predict destruction and impact immediately (0ms delay)
+      const cx = p.x + 3
+      const cy = p.y + 3
+      const col = Math.floor(cx / TILE_SIZE)
+      const row = Math.floor(cy / TILE_SIZE)
+      const tile = map[row]?.[col]
+      if (tile === TILE_BRICK) {
+        if (map[row]) map[row]![col] = TILE_EMPTY
+        tankAudio.explodeSmall()
+        spawnSparks(col * TILE_SIZE + 8, row * TILE_SIZE + 8, '#f97316', 10)
+      } else if (tile === TILE_STEEL) {
+        tankAudio.hitSteel()
+        spawnSparks(cx, cy, '#fcd34d', 6)
+      } else if (tile === TILE_FORT_BLUE || tile === TILE_FORT_RED) {
+        tankAudio.hitSteel()
+        spawnSparks(cx, cy, tile === TILE_FORT_BLUE ? '#38bdf8' : '#ef4444', 8)
+      }
+      proxies.splice(i, 1)
+    }
   }
 }
 
@@ -752,6 +800,9 @@ function reconcile(snap: TankSnapshot) {
     pending = []
     errX = errY = 0
     return
+  }
+  if (me.lives > 0 && eliminatedNotified) {
+    eliminatedNotified = false
   }
   if (!pred.alive) {
     pred.alive = true
@@ -810,7 +861,7 @@ function advanceTimeline(nowMs: number) {
   const current = snaps[0]!
   updateHud(current)
 
-  if (pendingResult && renderTick >= pendingResult.snapshot.tick) {
+  if (pendingResult && (!pendingResult.snapshot || renderTick >= pendingResult.snapshot.tick)) {
     const r = pendingResult
     pendingResult = null
     winner.value = r.winner
@@ -834,7 +885,7 @@ function updateHud(s: TankSnapshot) {
     eliminatedNotified = true
     heldDirs.length = 0
     flushInput()
-    showToast('Bạn đã hết mạng — tiếp tục xem đồng đội thi đấu', 'danger', LucideSkull)
+    showToast('Bạn đã chết — tiếp tục quan sát đồng đội thi đấu', 'danger', LucideSkull)
   }
 }
 
@@ -1266,19 +1317,35 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
+  padding: 6px 12px;
   border-radius: 999px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #fecaca;
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.88);
   border: 1px solid rgba(239, 68, 68, 0.6);
   pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
-.badge-spectator.respawn { color: #bae6fd; border-color: rgba(56, 189, 248, 0.6); }
-.badge-spectator .icon { width: 13px; height: 13px; }
+.badge-spectator.dead {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.8);
+  background: rgba(20, 10, 10, 0.9);
+}
+.badge-spectator.respawn {
+  color: #bae6fd;
+  border-color: rgba(56, 189, 248, 0.6);
+}
+.badge-spectator .icon { width: 14px; height: 14px; }
+.badge-spectator .icon.spin { animation: badge-spin 1.2s linear infinite; }
+
+@keyframes badge-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .result-bar {
   position: absolute;

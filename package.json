@@ -12,6 +12,9 @@
     "stop": "kill $(lsof -ti tcp:${PORT:-4000}) 2>/dev/null || echo 'No server running on port '${PORT:-4000}"
   },
   "dependencies": {
+    "@colyseus/schema": "^5.0.40",
+    "@colyseus/ws-transport": "^0.18.4",
+    "colyseus": "^0.18.1",
     "express": "^4.19.2",
     "redis": "^6.2.0",
     "socket.io": "^4.7.5"

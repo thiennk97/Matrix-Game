@@ -403,12 +403,12 @@ function updateBullets(game, room) {
 
     if (tile === TILE_BRICK) {
       setTile(game, row, col, TILE_EMPTY);
-      pushEvent(game, { type: 'brick', x: col * TILE_SIZE + 8, y: row * TILE_SIZE + 8 });
+      pushEvent(game, { type: 'brick', x: col * TILE_SIZE + 8, y: row * TILE_SIZE + 8, ownerId: b.ownerId });
       removeBullet(game, i);
       continue;
     }
     if (tile === TILE_STEEL) {
-      pushEvent(game, { type: 'steel', x: round1(cx), y: round1(cy) });
+      pushEvent(game, { type: 'steel', x: round1(cx), y: round1(cy), ownerId: b.ownerId });
       removeBullet(game, i);
       continue;
     }
