@@ -8,7 +8,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "build:frontend": "nuxt generate && rm -rf ../public/* && cp -r .output/public/ ../public/",
+    "build:frontend": "nuxt generate && mkdir -p ../public && rm -rf ../public/* && cp -r .output/public/* ../public/",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint . --fix"
   },
@@ -16,10 +16,13 @@
     "@colyseus/sdk": "^0.18.5",
     "@lucide/vue": "latest",
     "@pinia/nuxt": "latest",
+    "@types/three": "^0.187.0",
     "nuxt": "latest",
     "pinia": "latest",
     "pixi.js": "^7.4.2",
     "socket.io-client": "latest",
+    "three": "^0.187.0",
+    "typescript": "^5.6.3",
     "vue": "latest",
     "vue-router": "latest"
   },
@@ -27,7 +30,6 @@
     "@nuxt/eslint": "^1.17.0",
     "eslint": "^10.8.1",
     "postcss": "^8.5.26",
-    "typescript": "^5.6.3",
     "vue-tsc": "^3.3.9"
   }
 }

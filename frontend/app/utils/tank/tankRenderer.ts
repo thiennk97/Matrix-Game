@@ -10,6 +10,7 @@ export interface RenderTank {
   team: Team
   name: string
   shield: boolean
+  missiles?: number
 }
 
 export interface RenderBullet {
@@ -17,6 +18,14 @@ export interface RenderBullet {
   y: number
   dir: number
   team: Team
+  m?: boolean
+}
+
+export interface RenderDrop {
+  id: number
+  x: number
+  y: number
+  type: string
 }
 
 export interface FireballPuff {
@@ -40,6 +49,66 @@ export interface TankExplosion {
 const BULLET_TRAVEL: Record<number, [number, number]> = { 0: [0, -1], 1: [1, 0], 2: [0, 1], 3: [-1, 0] }
 
 export function drawBullet(c: CanvasRenderingContext2D, b: RenderBullet) {
+  if (b.m) {
+    // 2D Missile rocket with fiery exhaust plume
+    const cx = b.x + 3
+    const cy = b.y + 3
+    c.save()
+    c.translate(cx, cy)
+    const angle = b.dir === 0 ? 0 : b.dir === 1 ? Math.PI / 2 : b.dir === 2 ? Math.PI : -Math.PI / 2
+    c.rotate(angle)
+
+    // Flame exhaust plume
+    const flicker = Math.random() * 4 + 6
+    c.fillStyle = 'rgba(249, 115, 22, 0.75)'
+    c.beginPath()
+    c.moveTo(-3, 4)
+    c.lineTo(3, 4)
+    c.lineTo(0, 4 + flicker)
+    c.closePath()
+    c.fill()
+
+    c.fillStyle = '#fef08a'
+    c.beginPath()
+    c.moveTo(-1.5, 4)
+    c.lineTo(1.5, 4)
+    c.lineTo(0, 4 + flicker * 0.6)
+    c.closePath()
+    c.fill()
+
+    // Rocket body
+    c.fillStyle = '#334155'
+    c.fillRect(-2.5, -4, 5, 8)
+
+    // Red nose cone
+    c.fillStyle = '#ef4444'
+    c.beginPath()
+    c.moveTo(-2.5, -4)
+    c.lineTo(2.5, -4)
+    c.lineTo(0, -9)
+    c.closePath()
+    c.fill()
+
+    // Fins
+    c.fillStyle = '#f59e0b'
+    c.beginPath()
+    c.moveTo(-2.5, 2)
+    c.lineTo(-5, 4)
+    c.lineTo(-2.5, 4)
+    c.closePath()
+    c.fill()
+
+    c.beginPath()
+    c.moveTo(2.5, 2)
+    c.lineTo(5, 4)
+    c.lineTo(2.5, 4)
+    c.closePath()
+    c.fill()
+
+    c.restore()
+    return
+  }
+
   const isBlue = b.team === 'blue'
   const glowColor = isBlue ? '#38bdf8' : '#ef4444'
   const tailColor = isBlue ? 'rgba(56, 189, 248, 0.4)' : 'rgba(239, 68, 68, 0.4)'
@@ -59,6 +128,97 @@ export function drawBullet(c: CanvasRenderingContext2D, b: RenderBullet) {
   c.beginPath()
   c.arc(b.x + 3, b.y + 3, 2, 0, Math.PI * 2)
   c.fill()
+}
+
+export function drawDrop(c: CanvasRenderingContext2D, drop: RenderDrop) {
+  const now = Date.now()
+  const pulse = Math.sin(now / 140) * 2.5
+  const cx = drop.x + TILE_SIZE / 2
+  const cy = drop.y + TILE_SIZE / 2 + pulse
+
+  c.save()
+
+  // 1. Expanding sonar radar ring for maximum visibility
+  const ringProgress = (now % 1000) / 1000
+  const ringRadius = 6 + ringProgress * 22
+  const ringAlpha = Math.max(0, (1 - ringProgress) * 0.75)
+  c.strokeStyle = `rgba(251, 191, 36, ${ringAlpha})`
+  c.lineWidth = 1.6
+  c.beginPath()
+  c.arc(cx, cy, ringRadius, 0, Math.PI * 2)
+  c.stroke()
+
+  // 2. Glowing aura beacon (multi-stop warm radial gradient)
+  const grad = c.createRadialGradient(cx, cy, 2, cx, cy, 22)
+  grad.addColorStop(0, 'rgba(254, 240, 138, 0.95)')
+  grad.addColorStop(0.35, 'rgba(245, 158, 11, 0.65)')
+  grad.addColorStop(0.7, 'rgba(239, 68, 68, 0.3)')
+  grad.addColorStop(1, 'rgba(239, 68, 68, 0)')
+  c.fillStyle = grad
+  c.beginPath()
+  c.arc(cx, cy, 22, 0, Math.PI * 2)
+  c.fill()
+
+  // 3. Ground shadow
+  c.fillStyle = 'rgba(0, 0, 0, 0.45)'
+  c.beginPath()
+  c.ellipse(cx, drop.y + TILE_SIZE - 1, 9, 3.5, 0, 0, Math.PI * 2)
+  c.fill()
+
+  // 4. Orbiting golden spark motes
+  for (let i = 0; i < 3; i++) {
+    const angle = (now * 0.0035 + (i * Math.PI * 2) / 3)
+    const sx = cx + Math.cos(angle) * 11
+    const sy = cy + Math.sin(angle) * 7
+    c.fillStyle = i % 2 === 0 ? '#fef08a' : '#f97316'
+    c.beginPath()
+    c.arc(sx, sy, 1.4, 0, Math.PI * 2)
+    c.fill()
+  }
+
+  // 5. Rotating angled missile pickup icon
+  c.save()
+  c.translate(cx, cy)
+  c.rotate(Math.PI / 4)
+
+  c.fillStyle = '#0f172a'
+  c.fillRect(-2.5, -6, 5, 12)
+  c.fillStyle = '#ef4444'
+  c.beginPath()
+  c.moveTo(-2.5, -6)
+  c.lineTo(2.5, -6)
+  c.lineTo(0, -11)
+  c.closePath()
+  c.fill()
+
+  c.fillStyle = '#fde047'
+  c.fillRect(-2.5, -2, 5, 2.5)
+
+  c.fillStyle = '#f59e0b'
+  c.fillRect(-5, 3, 2.5, 3)
+  c.fillRect(2.5, 3, 2.5, 3)
+  c.restore()
+
+  // 6. Floating high-contrast "🚀 TÊN LỬA" label tag above the drop
+  c.save()
+  c.font = 'bold 7px sans-serif'
+  c.textAlign = 'center'
+  c.textBaseline = 'middle'
+  const labelY = drop.y - 7 + pulse * 0.5
+  const pillW = 38
+  const pillH = 11
+  c.fillStyle = 'rgba(15, 23, 42, 0.92)'
+  c.beginPath()
+  c.roundRect(cx - pillW / 2, labelY - pillH / 2, pillW, pillH, 3.5)
+  c.fill()
+  c.strokeStyle = '#f59e0b'
+  c.lineWidth = 1.2
+  c.stroke()
+  c.fillStyle = '#fef08a'
+  c.fillText('🚀 TÊN LỬA', cx, labelY + 0.5)
+  c.restore()
+
+  c.restore()
 }
 
 export function drawExplosions(c: CanvasRenderingContext2D, explosions: TankExplosion[]) {
@@ -396,6 +556,24 @@ export function drawPvPTank(c: CanvasRenderingContext2D, tank: RenderTank, isLoc
   c.fillStyle = '#0f172a'
   c.beginPath(); c.arc(1.5, 0.5, 2, 0, Math.PI * 2); c.fill()
 
+  const hasMissiles = (tank.missiles || 0) > 0
+  const missileCount = tank.missiles || 0
+
+  if (hasMissiles) {
+    // Mounted mini-rocket pod on side of turret
+    c.fillStyle = '#0f172a'
+    c.fillRect(3.5, -7, 4, 11)
+    c.fillStyle = '#ef4444'
+    c.beginPath()
+    c.moveTo(3.5, -7)
+    c.lineTo(7.5, -7)
+    c.lineTo(5.5, -11)
+    c.closePath()
+    c.fill()
+    c.fillStyle = '#f59e0b'
+    c.fillRect(3.5, -2, 4, 2)
+  }
+
   if (tank.shield) {
     const pulseAlpha = 0.5 + Math.sin(Date.now() / 80) * 0.3
     c.strokeStyle = `rgba(56, 189, 248, ${pulseAlpha})`
@@ -418,8 +596,10 @@ export function drawPvPTank(c: CanvasRenderingContext2D, tank: RenderTank, isLoc
   const label = tank.name || 'Player'
   const starW = isLocal ? 6 : 0
   const starGap = isLocal ? 2 : 0
+  const missileBadgeW = hasMissiles ? (missileCount > 1 ? 16 : 10) : 0
+  const missileBadgeGap = hasMissiles ? 3 : 0
   const textW = c.measureText(label).width
-  const contentW = starW + starGap + textW
+  const contentW = starW + starGap + textW + missileBadgeGap + missileBadgeW
   const tagWidth = Math.max(24, contentW + 8)
   const tagH = 10
   const gap = 2
@@ -429,14 +609,30 @@ export function drawPvPTank(c: CanvasRenderingContext2D, tank: RenderTank, isLoc
   const tagCy = Math.min(Math.max(edgeY, tagH / 2 + 1), WORLD_SIZE - tagH / 2 - 1)
 
   c.translate(tagCx, tagCy)
-  c.fillStyle = 'rgba(15, 23, 42, 0.85)'
+  c.fillStyle = hasMissiles ? 'rgba(25, 20, 12, 0.94)' : 'rgba(15, 23, 42, 0.85)'
   c.fillRect(-tagWidth / 2, -tagH / 2, tagWidth, tagH)
-  c.strokeStyle = isLocal ? '#fcd34d' : isBlue ? '#38bdf8' : '#ef4444'
-  c.lineWidth = 1
+
+  if (hasMissiles) {
+    const pulseAlpha = 0.7 + Math.sin(Date.now() / 120) * 0.3
+    c.strokeStyle = `rgba(245, 158, 11, ${pulseAlpha})`
+    c.lineWidth = 1.5
+  } else {
+    c.strokeStyle = isLocal ? '#fcd34d' : isBlue ? '#38bdf8' : '#ef4444'
+    c.lineWidth = 1
+  }
   c.strokeRect(-tagWidth / 2, -tagH / 2, tagWidth, tagH)
+
   c.fillStyle = isLocal ? '#fcd34d' : '#f8fafc'
   const startX = -contentW / 2
   if (isLocal) drawStar(c, startX + starW / 2, -0.2, 3)
   c.fillText(label, startX + starW + starGap, 2.8)
+
+  if (hasMissiles) {
+    const rx = startX + starW + starGap + textW + missileBadgeGap
+    c.fillStyle = '#f59e0b'
+    c.font = 'bold 7px sans-serif'
+    c.fillText(missileCount > 1 ? `🚀${missileCount}` : '🚀', rx, 2.8)
+  }
+
   c.restore()
 }

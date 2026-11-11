@@ -70,11 +70,30 @@ function overlaps(ax, ay, aw, ah, bx, by, bw, bh) {
 export function createGame(room, mapIndex) {
   const map = getPvPStageMap(mapIndex);
   const wallHp = new Map();
+  const brickTiles = [];
+
   for (let r = 0; r < MAP_SIZE; r++) {
     for (let c = 0; c < MAP_SIZE; c++) {
       if (map[r][c] === TILE_FORT_BLUE || map[r][c] === TILE_FORT_RED) {
         wallHp.set(`${r}_${c}`, FORT_HP);
+      } else if (map[r][c] === TILE_BRICK) {
+        brickTiles.push(`${r}_${c}`);
       }
+    }
+  }
+
+  // Pre-select exactly 2 random brick tiles on the map to hold missiles (or 0 if map has no bricks)
+  const missileBricks = new Set();
+  if (brickTiles.length > 0) {
+    for (let i = brickTiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = brickTiles[i];
+      brickTiles[i] = brickTiles[j];
+      brickTiles[j] = temp;
+    }
+    const targetCount = Math.min(2, brickTiles.length);
+    for (let i = 0; i < targetCount; i++) {
+      missileBricks.add(brickTiles[i]);
     }
   }
 
@@ -88,6 +107,9 @@ export function createGame(room, mapIndex) {
     tanks: new Map(),
     bullets: [],
     nextBulletId: 1,
+    drops: [],
+    nextDropId: 1,
+    missileBricks,
     events: [],
     eagles: { blue: true, red: true },
     result: null
@@ -108,6 +130,7 @@ export function createGame(room, mapIndex) {
       shieldUntil: COUNTDOWN_TICKS + START_SHIELD_TICKS,
       respawnAt: 0,
       cooldown: 0,
+      missiles: 0,
       input: { dir: -1, fire: false },
       cmdQueue: [],
       cmdCredit: 1,
@@ -140,18 +163,23 @@ export function clearInput(game, playerId) {
   tank.cmdQueue.length = 0;
 }
 
-const MAX_QUEUED_COMMANDS = 10;
-const MAX_COMMAND_CREDIT = 3;
+const MAX_QUEUED_COMMANDS = 24;
+const MAX_COMMAND_CREDIT = 6;
 
 // Movement commands: the client numbers one command per 60Hz step and the server applies them
 // in order. The snapshot echoes the last applied number (ack) so the client can replay anything
 // newer on top of the authoritative position, which keeps prediction exact.
-export function enqueueCommand(game, playerId, n, dir, fire) {
+export function enqueueCommand(game, playerId, n, dir, fire, missile) {
   const tank = game.tanks.get(playerId);
   if (!tank || !Number.isInteger(n)) return;
   const last = tank.cmdQueue.length ? tank.cmdQueue[tank.cmdQueue.length - 1].n : tank.ack;
   if (n <= last) return;
-  tank.cmdQueue.push({ n, dir: Number.isInteger(dir) && dir >= 0 && dir <= 3 ? dir : -1, fire: Boolean(fire) });
+  tank.cmdQueue.push({
+    n,
+    dir: Number.isInteger(dir) && dir >= 0 && dir <= 3 ? dir : -1,
+    fire: Boolean(fire),
+    missile: Boolean(missile)
+  });
   if (tank.cmdQueue.length > MAX_QUEUED_COMMANDS) tank.cmdQueue.shift();
 }
 
@@ -240,39 +268,98 @@ function fireBullet(game, tank, cmdN) {
   return true;
 }
 
+const MISSILE_SIZE = 10;
+const MISSILE_SPEED = BULLET_SPEED * 1.15;
+
+function fireMissile(game, tank, cmdN) {
+  if (!tank.missiles || tank.missiles <= 0) return false;
+  tank.missiles--;
+
+  const half = TANK_SIZE / 2 - MISSILE_SIZE / 2;
+  let bx = tank.x + half;
+  let by = tank.y + half;
+  if (tank.dir === 0) by = tank.y - MISSILE_SIZE;
+  else if (tank.dir === 1) bx = tank.x + TANK_SIZE;
+  else if (tank.dir === 2) by = tank.y + TANK_SIZE;
+  else bx = tank.x - MISSILE_SIZE;
+
+  const v = DIR_VECTORS[tank.dir];
+  game.bullets.push({
+    id: game.nextBulletId++,
+    x: bx,
+    y: by,
+    vx: v.dx * MISSILE_SPEED,
+    vy: v.dy * MISSILE_SPEED,
+    dir: tank.dir,
+    ownerId: tank.id,
+    team: tank.team,
+    cmd: cmdN,
+    isMissile: true,
+    size: MISSILE_SIZE
+  });
+  tank.cooldown = FIRE_COOLDOWN_TICKS;
+  pushEvent(game, { type: 'fire_missile', team: tank.team, ownerId: tank.id, x: bx + 5, y: by + 5 });
+  return true;
+}
+
 // Each command is one 60Hz step of that player's tank: cool the cannon, fire if asked (from the
 // tank's current pose), then move. The client mirrors this order exactly for prediction.
 function moveTank(game, tank) {
   for (const cmd of takeCommands(tank)) {
     if (tank.cooldown > 0) tank.cooldown--;
-    if (cmd.fire && tank.cooldown === 0) fireBullet(game, tank, cmd.n);
+    if (cmd.missile && (tank.missiles || 0) > 0) {
+      fireMissile(game, tank, cmd.n);
+    } else if (cmd.fire && tank.cooldown === 0) {
+      fireBullet(game, tank, cmd.n);
+    }
     applyMove(game, tank, cmd.dir);
   }
 }
 
 function applyMove(game, tank, dir) {
-  if (dir < 0) return;
-  tank.dir = dir;
-  const v = DIR_VECTORS[dir];
+  if (dir >= 0) {
+    tank.dir = dir;
+    const v = DIR_VECTORS[dir];
 
-  // Corner assist: slide onto the 8px grid, but only if the snapped spot is actually free.
-  if (v.dy !== 0) {
-    const snapX = Math.round(tank.x / SNAP_GRID) * SNAP_GRID;
-    if (snapX !== tank.x && Math.abs(tank.x - snapX) < SNAP_TOLERANCE && canOccupy(game, tank, snapX, tank.y)) {
-      tank.x = snapX;
+    // Corner assist: slide onto the 8px grid, but only if the snapped spot is actually free.
+    if (v.dy !== 0) {
+      const snapX = Math.round(tank.x / SNAP_GRID) * SNAP_GRID;
+      if (snapX !== tank.x && Math.abs(tank.x - snapX) < SNAP_TOLERANCE && canOccupy(game, tank, snapX, tank.y)) {
+        tank.x = snapX;
+      }
+    } else {
+      const snapY = Math.round(tank.y / SNAP_GRID) * SNAP_GRID;
+      if (snapY !== tank.y && Math.abs(tank.y - snapY) < SNAP_TOLERANCE && canOccupy(game, tank, tank.x, snapY)) {
+        tank.y = snapY;
+      }
     }
-  } else {
-    const snapY = Math.round(tank.y / SNAP_GRID) * SNAP_GRID;
-    if (snapY !== tank.y && Math.abs(tank.y - snapY) < SNAP_TOLERANCE && canOccupy(game, tank, tank.x, snapY)) {
-      tank.y = snapY;
+
+    const nx = tank.x + v.dx * TANK_SPEED;
+    const ny = tank.y + v.dy * TANK_SPEED;
+    if (canOccupy(game, tank, nx, ny)) {
+      tank.x = nx;
+      tank.y = ny;
     }
   }
 
-  const nx = tank.x + v.dx * TANK_SPEED;
-  const ny = tank.y + v.dy * TANK_SPEED;
-  if (canOccupy(game, tank, nx, ny)) {
-    tank.x = nx;
-    tank.y = ny;
+  // Check if tank stepped onto a drop item (missile pickup)
+  for (let i = game.drops.length - 1; i >= 0; i--) {
+    const drop = game.drops[i];
+    if (overlaps(tank.x, tank.y, TANK_SIZE, TANK_SIZE, drop.x, drop.y, TILE_SIZE, TILE_SIZE)) {
+      if (drop.type === 'missile') {
+        tank.missiles = (tank.missiles || 0) + 1;
+        pushEvent(game, {
+          type: 'pickup',
+          item: 'missile',
+          id: tank.id,
+          ownerId: tank.id,
+          team: tank.team,
+          x: drop.x + 8,
+          y: drop.y + 8
+        });
+      }
+      game.drops.splice(i, 1);
+    }
   }
 }
 
@@ -358,6 +445,80 @@ function removeBullet(game, index) {
   game.bullets.splice(index, 1);
 }
 
+function breakBrick(game, r, c, ownerId) {
+  setTile(game, r, c, TILE_EMPTY);
+  pushEvent(game, { type: 'brick', x: c * TILE_SIZE + 8, y: r * TILE_SIZE + 8, ownerId });
+  const key = `${r}_${c}`;
+  if (game.missileBricks && game.missileBricks.has(key)) {
+    game.missileBricks.delete(key);
+    game.drops.push({
+      id: game.nextDropId++,
+      type: 'missile',
+      x: c * TILE_SIZE,
+      y: r * TILE_SIZE
+    });
+    pushEvent(game, { type: 'drop_spawn', item: 'missile', x: c * TILE_SIZE + 8, y: r * TILE_SIZE + 8 });
+  }
+}
+
+function detonateMissile(game, room, b, hitCol, hitRow) {
+  const centerCol = Math.max(0, Math.min(MAP_SIZE - 1, hitCol));
+  const centerRow = Math.max(0, Math.min(MAP_SIZE - 1, hitRow));
+  const centerX = centerCol * TILE_SIZE + 8;
+  const centerY = centerRow * TILE_SIZE + 8;
+
+  pushEvent(game, {
+    type: 'missile_explosion',
+    x: centerX,
+    y: centerY,
+    radius: 24,
+    ownerId: b.ownerId
+  });
+
+  // 1. Destroy bricks and fort tiles in 3x3 grid
+  for (let r = centerRow - 1; r <= centerRow + 1; r++) {
+    for (let c = centerCol - 1; c <= centerCol + 1; c++) {
+      if (r < 0 || r >= MAP_SIZE || c < 0 || c >= MAP_SIZE) continue;
+      const tile = game.map[r][c];
+      if (tile === TILE_BRICK) {
+        breakBrick(game, r, c, b.ownerId);
+      } else if (tile === TILE_FORT_BLUE || tile === TILE_FORT_RED) {
+        const fortTeam = tile === TILE_FORT_BLUE ? 'blue' : 'red';
+        if (b.team !== fortTeam) {
+          setTile(game, r, c, TILE_EMPTY);
+          pushEvent(game, { type: 'explosion', x: c * TILE_SIZE + 8, y: r * TILE_SIZE + 8, big: false });
+        }
+      } else if (tile === TILE_BASE_BLUE || tile === TILE_BASE_RED) {
+        const eagleTeam = tile === TILE_BASE_BLUE ? 'blue' : 'red';
+        if (b.team !== eagleTeam) {
+          destroyEagle(game, eagleTeam);
+          pushEvent(game, {
+            type: 'explosion',
+            x: 13 * TILE_SIZE,
+            y: eagleTeam === 'blue' ? 25 * TILE_SIZE : 1 * TILE_SIZE,
+            big: true
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Blast damage to opponent tanks only in 3x3 area (no self-damage or friendly fire)
+  const blastX = (centerCol - 1) * TILE_SIZE;
+  const blastY = (centerRow - 1) * TILE_SIZE;
+  const blastSize = 3 * TILE_SIZE;
+  for (const tank of game.tanks.values()) {
+    if (!tank.alive || tank.team === b.team) continue;
+    if (overlaps(blastX, blastY, blastSize, blastSize, tank.x, tank.y, TANK_SIZE, TANK_SIZE)) {
+      if (isShielded(game, tank)) {
+        pushEvent(game, { type: 'shield', x: tank.x + 14, y: tank.y + 14 });
+      } else {
+        killTank(game, room, tank, b.ownerId);
+      }
+    }
+  }
+}
+
 function updateBullets(game, room) {
   for (let i = game.bullets.length - 1; i >= 0; i--) {
     const b = game.bullets[i];
@@ -365,24 +526,58 @@ function updateBullets(game, room) {
     b.x += b.vx;
     b.y += b.vy;
 
-    if (b.x < 0 || b.y < 0 || b.x + BULLET_SIZE > WORLD_SIZE || b.y + BULLET_SIZE > WORLD_SIZE) {
+    const bSize = b.size || BULLET_SIZE;
+
+    if (b.x < 0 || b.y < 0 || b.x + bSize > WORLD_SIZE || b.y + bSize > WORLD_SIZE) {
+      if (b.isMissile) {
+        const col = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor((b.x + bSize / 2) / TILE_SIZE)));
+        const row = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor((b.y + bSize / 2) / TILE_SIZE)));
+        detonateMissile(game, room, b, col, row);
+      }
       removeBullet(game, i);
       continue;
     }
 
-    // Opposing bullets cancel each other out.
+    // Opposing bullets interaction:
+    // Missile is NOT blocked by normal bullets! Normal bullet is destroyed, missile keeps flying.
     let clashedWith = -1;
     for (let j = game.bullets.length - 1; j >= 0; j--) {
       if (j === i) continue;
       const o = game.bullets[j];
       if (o.team === b.team) continue;
-      if (overlaps(b.x, b.y, BULLET_SIZE, BULLET_SIZE, o.x, o.y, BULLET_SIZE, BULLET_SIZE)) {
+      const oSize = o.size || BULLET_SIZE;
+      if (overlaps(b.x, b.y, bSize, bSize, o.x, o.y, oSize, oSize)) {
+        if (b.isMissile && !o.isMissile) {
+          // Normal bullet destroyed, missile keeps flying!
+          pushEvent(game, { type: 'clash', x: round1(o.x + 3), y: round1(o.y + 3) });
+          removeBullet(game, j);
+          if (j < i) i--;
+          continue;
+        }
+        if (!b.isMissile && o.isMissile) {
+          // Normal bullet destroyed
+          pushEvent(game, { type: 'clash', x: round1(b.x + 3), y: round1(b.y + 3) });
+          removeBullet(game, i);
+          clashedWith = j;
+          break;
+        }
+        if (b.isMissile && o.isMissile) {
+          // Mid-air head-on missile clash: detonate both in 3x3!
+          const col = Math.floor((b.x + o.x) / 2 / TILE_SIZE);
+          const row = Math.floor((b.y + o.y) / 2 / TILE_SIZE);
+          detonateMissile(game, room, b, col, row);
+          detonateMissile(game, room, o, col, row);
+          removeBullet(game, Math.max(i, j));
+          removeBullet(game, Math.min(i, j));
+          clashedWith = j;
+          break;
+        }
+        // Both are normal bullets
         pushEvent(game, {
           type: 'clash',
           x: round1((b.x + o.x) / 2 + BULLET_SIZE / 2),
           y: round1((b.y + o.y) / 2 + BULLET_SIZE / 2)
         });
-        // Remove higher index first so the lower index stays valid.
         removeBullet(game, Math.max(i, j));
         removeBullet(game, Math.min(i, j));
         clashedWith = j;
@@ -390,32 +585,44 @@ function updateBullets(game, room) {
       }
     }
     if (clashedWith >= 0) {
-      // Items between the two removed bullets shifted down by one; keep the downward scan aligned.
       if (clashedWith < i) i--;
       continue;
     }
 
-    const cx = b.x + BULLET_SIZE / 2;
-    const cy = b.y + BULLET_SIZE / 2;
+    const cx = b.x + bSize / 2;
+    const cy = b.y + bSize / 2;
     const col = Math.floor(cx / TILE_SIZE);
     const row = Math.floor(cy / TILE_SIZE);
     const tile = game.map[row]?.[col];
 
     if (tile === TILE_BRICK) {
-      setTile(game, row, col, TILE_EMPTY);
-      pushEvent(game, { type: 'brick', x: col * TILE_SIZE + 8, y: row * TILE_SIZE + 8, ownerId: b.ownerId });
+      if (b.isMissile) {
+        detonateMissile(game, room, b, col, row);
+      } else {
+        breakBrick(game, row, col, b.ownerId);
+      }
       removeBullet(game, i);
       continue;
     }
+
     if (tile === TILE_STEEL) {
-      pushEvent(game, { type: 'steel', x: round1(cx), y: round1(cy), ownerId: b.ownerId });
+      if (b.isMissile) {
+        detonateMissile(game, room, b, col, row);
+      } else {
+        pushEvent(game, { type: 'steel', x: round1(cx), y: round1(cy), ownerId: b.ownerId });
+      }
       removeBullet(game, i);
       continue;
     }
+
     if (tile === TILE_FORT_BLUE || tile === TILE_FORT_RED) {
       const fortTeam = tile === TILE_FORT_BLUE ? 'blue' : 'red';
+      if (b.isMissile) {
+        detonateMissile(game, room, b, col, row);
+        removeBullet(game, i);
+        continue;
+      }
       removeBullet(game, i);
-      // Friendly shots are simply absorbed by their own fortress.
       if (b.team === fortTeam) {
         pushEvent(game, { type: 'steel', x: round1(cx), y: round1(cy) });
         continue;
@@ -430,8 +637,14 @@ function updateBullets(game, room) {
       }
       continue;
     }
+
     if (tile === TILE_BASE_BLUE || tile === TILE_BASE_RED) {
       const eagleTeam = tile === TILE_BASE_BLUE ? 'blue' : 'red';
+      if (b.isMissile) {
+        detonateMissile(game, room, b, col, row);
+        removeBullet(game, i);
+        continue;
+      }
       removeBullet(game, i);
       if (b.team !== eagleTeam) {
         destroyEagle(game, eagleTeam);
@@ -445,18 +658,25 @@ function updateBullets(game, room) {
       continue;
     }
 
-    // Bullet vs enemy tanks. Resolved only here, so a bullet disappears exactly when it hits.
+    // Bullet vs enemy tanks
     let consumed = false;
     for (const tank of game.tanks.values()) {
       if (!tank.alive || tank.team === b.team) continue;
-      if (!overlaps(b.x, b.y, BULLET_SIZE, BULLET_SIZE, tank.x, tank.y, TANK_SIZE, TANK_SIZE)) continue;
+      if (!overlaps(b.x, b.y, bSize, bSize, tank.x, tank.y, TANK_SIZE, TANK_SIZE)) continue;
+
+      if (b.isMissile) {
+        const tCol = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor((tank.x + 14) / TILE_SIZE)));
+        const tRow = Math.max(0, Math.min(MAP_SIZE - 1, Math.floor((tank.y + 14) / TILE_SIZE)));
+        detonateMissile(game, room, b, tCol, tRow);
+      } else {
+        if (isShielded(game, tank)) {
+          pushEvent(game, { type: 'shield', x: round1(cx), y: round1(cy) });
+        } else {
+          killTank(game, room, tank, b.ownerId);
+        }
+      }
       removeBullet(game, i);
       consumed = true;
-      if (isShielded(game, tank)) {
-        pushEvent(game, { type: 'shield', x: round1(cx), y: round1(cy) });
-      } else {
-        killTank(game, room, tank, b.ownerId);
-      }
       break;
     }
     if (consumed) continue;
@@ -507,7 +727,8 @@ export function buildSnapshot(game, room, events = []) {
       lives: player ? player.lives : 0,
       kills: player ? player.kills : 0,
       deaths: player ? player.deaths : 0,
-      online: player ? player.connected : false
+      online: player ? player.connected : false,
+      missiles: tank.missiles || 0
     });
   }
   return {
@@ -521,7 +742,14 @@ export function buildSnapshot(game, room, events = []) {
       dir: b.dir,
       team: b.team,
       o: b.ownerId,
-      c: b.cmd
+      c: b.cmd,
+      m: Boolean(b.isMissile)
+    })),
+    drops: (game.drops || []).map((d) => ({
+      id: d.id,
+      x: d.x,
+      y: d.y,
+      type: d.type
     })),
     events
   };

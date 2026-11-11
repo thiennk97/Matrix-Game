@@ -13,6 +13,16 @@ export interface TankPlayer {
   lives: number
 }
 
+export interface RoundHistoryEntry {
+  round: number
+  winner: Team | 'draw'
+  blueScore: number
+  redScore: number
+  targetWins?: number
+  totalMatches: number
+  finishedAt: number
+}
+
 export interface TankRoomSummary {
   roomCode: string
   hostName: string
@@ -21,6 +31,8 @@ export interface TankRoomSummary {
   blueCount: number
   redCount: number
   status: 'LOBBY' | 'PLAYING' | 'FINISHED'
+  matchesPerRound?: number
+  currentRound?: number
   joinable: boolean
   createdAt: number
 }
@@ -32,6 +44,7 @@ export interface TankRoomState {
   mapIndex: number
   mapName: string
   players: TankPlayer[]
+  maxPlayers?: number
   eagles: {
     blue: { alive: boolean }
     red: { alive: boolean }
@@ -39,6 +52,9 @@ export interface TankRoomState {
   winner: Team | null
   gameOverReason: 'eagle' | 'lives' | null
   teamScores: { blue: number; red: number }
+  matchesPerRound: number
+  currentRound: number
+  roundHistory: RoundHistoryEntry[]
   createdAt: number
 }
 
@@ -55,6 +71,7 @@ export interface SnapTank {
   lives: number
   kills: number
   deaths: number
+  missiles?: number
   online: boolean
 }
 
@@ -66,6 +83,14 @@ export interface SnapBullet {
   team: Team
   o: string // owner player id
   c: number // movement command number that fired it (pairs it with the shooter's local proxy)
+  m?: boolean // true if rocket missile
+}
+
+export interface SnapDrop {
+  id: number
+  x: number
+  y: number
+  type: 'missile'
 }
 
 export type SnapEvent =
@@ -79,12 +104,17 @@ export type SnapEvent =
   | { type: 'explosion'; x: number; y: number; big: boolean; victimId?: string; killerId?: string | null }
   | { type: 'eagle'; team: Team }
   | { type: 'respawn'; id: string }
+  | { type: 'pickup'; item: 'missile'; ownerId: string; team: Team; x: number; y: number }
+  | { type: 'drop_spawn'; item: 'missile'; x: number; y: number }
+  | { type: 'fire_missile'; team: Team; ownerId: string; x: number; y: number }
+  | { type: 'missile_explosion'; x: number; y: number; radius: number; ownerId?: string }
 
 export interface TankSnapshot {
   tick: number
   countdown: number
   tanks: SnapTank[]
   bullets: SnapBullet[]
+  drops?: SnapDrop[]
   events: SnapEvent[]
 }
 
@@ -103,4 +133,5 @@ export interface TankGameOver {
   destroyedTeam: Team
   snapshot: TankSnapshot
   room: TankRoomState
+  completedRound?: RoundHistoryEntry
 }

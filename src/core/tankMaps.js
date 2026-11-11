@@ -31,11 +31,15 @@ export const BASE_RED_WALL_COORDS = [
 export const PVP_SPAWN_POINTS = {
   blue: [
     { x: 8 * 16, y: 24 * 16, dir: 0 },
-    { x: 16 * 16, y: 24 * 16, dir: 0 }
+    { x: 16 * 16, y: 24 * 16, dir: 0 },
+    { x: 4 * 16, y: 24 * 16, dir: 0 },
+    { x: 20 * 16, y: 24 * 16, dir: 0 }
   ],
   red: [
     { x: 8 * 16, y: 1 * 16, dir: 2 },
-    { x: 16 * 16, y: 1 * 16, dir: 2 }
+    { x: 16 * 16, y: 1 * 16, dir: 2 },
+    { x: 4 * 16, y: 1 * 16, dir: 2 },
+    { x: 20 * 16, y: 1 * 16, dir: 2 }
   ]
 }
 

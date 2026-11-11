@@ -52,6 +52,7 @@ export interface ProxyBullet {
   px: number
   py: number
   dir: number
+  m?: boolean
 }
 
 export function muzzlePosition(pose: PredictedPose) {
@@ -69,10 +70,11 @@ export function muzzlePosition(pose: PredictedPose) {
 // Tank hits are left to the server.
 export function stepProxyBullet(b: ProxyBullet, map: number[][]) {
   const v = DIR_VECTORS[b.dir]!
+  const spd = b.m ? BULLET_SPEED * 1.15 : BULLET_SPEED
   b.px = b.x
   b.py = b.y
-  b.x += v.dx * BULLET_SPEED
-  b.y += v.dy * BULLET_SPEED
+  b.x += v.dx * spd
+  b.y += v.dy * spd
   if (b.x < 0 || b.y < 0 || b.x + BULLET_SIZE > WORLD_SIZE || b.y + BULLET_SIZE > WORLD_SIZE) return false
   const col = Math.floor((b.x + BULLET_SIZE / 2) / TILE_SIZE)
   const row = Math.floor((b.y + BULLET_SIZE / 2) / TILE_SIZE)

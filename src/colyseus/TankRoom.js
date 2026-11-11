@@ -3,7 +3,8 @@ import {
   TankRoomStateSchema,
   TankPlayerSchema,
   TankEntitySchema,
-  BulletEntitySchema
+  BulletEntitySchema,
+  DropEntitySchema
 } from './tankSchema.js';
 import {
   createGame,
@@ -19,8 +20,8 @@ import {
 import { PVP_MAP_NAMES } from '../core/tankMaps.js';
 
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const MAX_PLAYERS = 4;
-const MAX_PER_TEAM = 2;
+const MAX_PLAYERS = 6;
+const MAX_PER_TEAM = 3;
 
 function generateTankRoomCode() {
   let code = 'TK';
@@ -47,6 +48,10 @@ export class TankColyseusRoom extends Room {
     state.redEagleAlive = true;
     state.blueScore = 0;
     state.redScore = 0;
+    const requestedMatches = parseInt(options.matchesPerRound, 10);
+    state.matchesPerRound = Number.isInteger(requestedMatches) && requestedMatches > 0 ? requestedMatches : 5;
+    state.currentRound = 1;
+    state.roundHistoryJson = '[]';
     state.createdAt = Date.now();
 
     this.setState(state);
@@ -81,9 +86,19 @@ export class TankColyseusRoom extends Room {
         blueCount,
         redCount,
         status: this.state.status,
+        matchesPerRound: this.state.matchesPerRound,
+        currentRound: this.state.currentRound,
         joinable: this.state.status === 'LOBBY' && this.state.players.size < MAX_PLAYERS,
         createdAt: this.state.createdAt
       });
+    }
+  }
+
+  get parsedRoundHistory() {
+    try {
+      return JSON.parse(this.state.roundHistoryJson || '[]');
+    } catch {
+      return [];
     }
   }
 
@@ -92,7 +107,11 @@ export class TankColyseusRoom extends Room {
     return {
       roomCode: this.state.roomCode,
       players: Array.from(this.state.players.values()),
-      teamScores: { blue: this.state.blueScore, red: this.state.redScore }
+      maxPlayers: MAX_PLAYERS,
+      teamScores: { blue: this.state.blueScore, red: this.state.redScore },
+      matchesPerRound: this.state.matchesPerRound,
+      currentRound: this.state.currentRound,
+      roundHistory: this.parsedRoundHistory
     };
   }
 
@@ -153,7 +172,7 @@ export class TankColyseusRoom extends Room {
     this.onMessage('cmd', (client, cmd) => {
       const playerId = this.sessionToPlayerId.get(client.sessionId);
       if (!playerId || this.state.status !== 'PLAYING' || !this.game) return;
-      enqueueCommand(this.game, playerId, cmd?.n, cmd?.dir, cmd?.f);
+      enqueueCommand(this.game, playerId, cmd?.n, cmd?.dir, cmd?.f, cmd?.m);
     });
 
     this.onMessage('input', (client, input) => {
@@ -201,6 +220,7 @@ export class TankColyseusRoom extends Room {
     // Initial state setup
     this.state.tanks.clear();
     this.state.bullets.clear();
+    this.state.drops.clear();
     this.state.wallHp.clear();
 
     for (const [pos, hp] of this.game.wallHp.entries()) {
@@ -237,6 +257,7 @@ export class TankColyseusRoom extends Room {
     this.game = null;
     this.state.tanks.clear();
     this.state.bullets.clear();
+    this.state.drops.clear();
 
     this.state.players.forEach((p) => {
       p.lives = MAX_LIVES;
@@ -420,6 +441,7 @@ export class TankColyseusRoom extends Room {
         te.lives = p.lives;
         te.kills = p.kills;
         te.deaths = p.deaths;
+        te.missiles = tank.missiles || 0;
         te.online = p.connected;
       }
     }
@@ -441,11 +463,33 @@ export class TankColyseusRoom extends Room {
       be.team = b.team;
       be.o = b.ownerId;
       be.c = b.cmd;
+      be.m = Boolean(b.isMissile);
     }
     // Remove dead bullets
     for (const key of this.state.bullets.keys()) {
       if (!liveBulletIds.has(key)) {
         this.state.bullets.delete(key);
+      }
+    }
+
+    // Sync drops (missile pickups)
+    const liveDropIds = new Set();
+    for (const d of (this.game.drops || [])) {
+      const idStr = String(d.id);
+      liveDropIds.add(idStr);
+      let de = this.state.drops.get(idStr);
+      if (!de) {
+        de = new DropEntitySchema();
+        de.id = d.id;
+        this.state.drops.set(idStr, de);
+      }
+      de.x = d.x;
+      de.y = d.y;
+      de.type = d.type;
+    }
+    for (const key of this.state.drops.keys()) {
+      if (!liveDropIds.has(key)) {
+        this.state.drops.delete(key);
       }
     }
 
@@ -469,6 +513,31 @@ export class TankColyseusRoom extends Room {
       if (result.winner === 'blue') this.state.blueScore++;
       else if (result.winner === 'red') this.state.redScore++;
 
+      let completedRound = null;
+      const targetWins = this.state.matchesPerRound;
+      if (targetWins > 0 && (this.state.blueScore >= targetWins || this.state.redScore >= targetWins)) {
+        const roundWinner = this.state.blueScore >= targetWins ? 'blue' : 'red';
+
+        completedRound = {
+          round: this.state.currentRound,
+          winner: roundWinner,
+          blueScore: this.state.blueScore,
+          redScore: this.state.redScore,
+          targetWins,
+          totalMatches: this.state.blueScore + this.state.redScore,
+          finishedAt: Date.now()
+        };
+
+        const history = this.parsedRoundHistory;
+        history.push(completedRound);
+        this.state.roundHistoryJson = JSON.stringify(history);
+
+        // Reset series score to 0 - 0 for next round and advance round counter
+        this.state.currentRound++;
+        this.state.blueScore = 0;
+        this.state.redScore = 0;
+      }
+
       const snapshot = buildSnapshot(this.game, this.roomData, drainEvents(this.game));
 
       this.broadcast('tank_game_over', {
@@ -476,7 +545,8 @@ export class TankColyseusRoom extends Room {
         reason: result.reason,
         destroyedTeam: result.destroyedTeam,
         snapshot,
-        room: this.roomData
+        room: this.roomData,
+        completedRound
       });
       this.updateRoomMetadata();
     }
@@ -488,3 +558,4 @@ export class TankColyseusRoom extends Room {
     this.game = null;
   }
 }
+  

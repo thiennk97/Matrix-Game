@@ -72,14 +72,14 @@
           </div>
           <h2 class="game-title">BATTLE CITY 1990</h2>
           <p class="game-summary">
-            Huyền thoại xe tăng máy bấm đầu đĩa DVD nay nâng cấp thành đối kháng 2 đội (Đội Xanh vs Đội Đỏ). Bảo vệ đại bàng nhà mình và bắn nổ đại bàng đối phương!
+            Huyền thoại xe tăng nâng cấp thành đối kháng 2 đội (Đội Xanh vs Đội Đỏ). Hỗ trợ đồ họa 3D Saltline với bóng mềm và giật nòng, có nút chuyển đổi 2D Retro tức thì!
           </p>
         </div>
 
         <div class="card-tags-list">
           <span class="portal-tag">PvP 2 Đội</span>
-          <span class="portal-tag">Bảo vệ 2 Đại Bàng</span>
-          <span class="portal-tag">NES 8-bit Audio</span>
+          <span class="portal-tag">Đồ họa 3D Saltline</span>
+          <span class="portal-tag">Chuyển đổi 2D/3D</span>
         </div>
 
         <div class="card-footer-action">
@@ -135,6 +135,18 @@
           </span>
         </div>
       </NuxtLink>
+    </div>
+
+    <!-- Extra: Saltline 3D Showcase Banner -->
+    <div class="portal-extra-banner">
+      <div class="extra-content">
+        <span class="extra-badge">3D FPS SHOWCASE</span>
+        <h3 class="extra-title">TRẢI NGHIỆM SALTLINE (3D TACTICAL FPS)</h3>
+        <p class="extra-desc">Bản thử nghiệm game bắn súng 3D góc nhìn thứ nhất chạy 100% trong trình duyệt với shader điện ảnh.</p>
+      </div>
+      <a href="/saltline/" target="_blank" class="extra-btn">
+        CHƠI SALTLINE 3D <LucideArrowRight class="icon" />
+      </a>
     </div>
   </div>
 </template>
@@ -448,6 +460,73 @@ import { LucideArrowRight } from '@lucide/vue'
   box-shadow: 0 0 16px rgba(5, 150, 105, 0.5);
 }
 
+.portal-extra-banner {
+  margin-top: 32px;
+  width: 100%;
+  max-width: 1100px;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.extra-badge {
+  display: inline-block;
+  font-family: 'Orbitron', monospace, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.extra-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.05em;
+}
+
+.extra-desc {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.extra-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  color: #38bdf8;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.extra-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+}
+
 @media (max-width: 1024px) {
   .portal-games-grid {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -461,6 +540,14 @@ import { LucideArrowRight } from '@lucide/vue'
   }
   .portal-title {
     font-size: 1.7rem;
+  }
+  .portal-extra-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .extra-btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

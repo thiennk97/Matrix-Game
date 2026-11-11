@@ -8,6 +8,7 @@ import type {
   TankGameOver,
   SnapTank,
   SnapBullet,
+  SnapDrop,
   SnapEvent,
   Direction,
   Team
@@ -114,6 +115,15 @@ function mapStateToRoom(state: any): TankRoomState {
     }
   }
 
+  let roundHistory = []
+  if (state.roundHistoryJson) {
+    try {
+      roundHistory = JSON.parse(state.roundHistoryJson)
+    } catch {
+      roundHistory = []
+    }
+  }
+
   return {
     roomCode: state.roomCode || '',
     hostPlayerId: state.hostPlayerId || '',
@@ -128,6 +138,9 @@ function mapStateToRoom(state: any): TankRoomState {
     winner: (state.winner as Team) || null,
     gameOverReason: (state.gameOverReason as 'eagle' | 'lives') || null,
     teamScores: { blue: state.blueScore ?? 0, red: state.redScore ?? 0 },
+    matchesPerRound: state.matchesPerRound ?? 10,
+    currentRound: state.currentRound ?? 1,
+    roundHistory,
     createdAt: state.createdAt ?? Date.now()
   }
 }
@@ -151,7 +164,8 @@ function buildSnapshotFromState(state: any): TankSnapshot {
         lives: t.lives ?? 3,
         kills: t.kills ?? 0,
         deaths: t.deaths ?? 0,
-        online: Boolean(t.online)
+        online: Boolean(t.online),
+        missiles: t.missiles ?? 0
       })
     }
   }
@@ -170,8 +184,40 @@ function buildSnapshotFromState(state: any): TankSnapshot {
         dir: (b.dir ?? 0) as Direction,
         team: (b.team || 'blue') as Team,
         o: b.o || '',
-        c: b.c ?? 0
+        c: b.c ?? 0,
+        m: Boolean(b.m)
       })
+    }
+  }
+
+  const drops: SnapDrop[] = []
+  if (state.drops) {
+    if (typeof state.drops.forEach === 'function') {
+      state.drops.forEach((d: any) => {
+        if (d && d.id !== undefined) {
+          drops.push({
+            id: Number(d.id),
+            x: Number(d.x),
+            y: Number(d.y),
+            type: d.type || 'missile'
+          })
+        }
+      })
+    } else {
+      const dValues = typeof state.drops.values === 'function'
+        ? Array.from(state.drops.values())
+        : Object.values(state.drops)
+
+      for (const d of dValues as any[]) {
+        if (d && d.id !== undefined) {
+          drops.push({
+            id: Number(d.id),
+            x: Number(d.x),
+            y: Number(d.y),
+            type: d.type || 'missile'
+          })
+        }
+      }
     }
   }
 
@@ -183,6 +229,7 @@ function buildSnapshotFromState(state: any): TankSnapshot {
     countdown: state.countdown ?? 0,
     tanks,
     bullets,
+    drops,
     events
   }
 }
@@ -267,10 +314,10 @@ export function useTankSocket() {
     }
   }
 
-  async function createRoom(playerName: string) {
+  async function createRoom(playerName: string, matchesPerRound: number = 10) {
     try {
       const client = getClient()
-      const room = await client.create('tank_room', { playerName })
+      const room = await client.create('tank_room', { playerName, matchesPerRound })
       attachRoomListeners(room)
       try {
         localStorage.setItem(NAME_KEY, playerName)
@@ -361,9 +408,9 @@ export function useTankSocket() {
     currentRoom.send('input', { dir, fire, fireSeq })
   }
 
-  function sendCommand(n: number, dir: number, fire: boolean) {
+  function sendCommand(n: number, dir: number, fire: boolean, missile: boolean = false) {
     if (!currentRoom) return
-    currentRoom.send('cmd', { n, dir, f: fire ? 1 : 0 })
+    currentRoom.send('cmd', { n, dir, f: fire ? 1 : 0, m: missile ? 1 : 0 })
   }
 
   return {

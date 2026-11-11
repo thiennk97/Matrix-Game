@@ -5,7 +5,7 @@
       <div class="index-header">
         <div class="header-titles">
           <h2>SẢNH CHỜ BATTLE CITY 1990</h2>
-          <p class="header-desc">Đối kháng 2 đội thời gian thực (2–4 người chơi)</p>
+          <p class="header-desc">Đối kháng 2 đội thời gian thực (2–6 người chơi, hỗ trợ 3v3)</p>
         </div>
         <button class="btn btn-primary create-room-btn" @click="openCreate">
           <LucidePlus class="icon" /> TẠO PHÒNG MỚI
@@ -59,12 +59,26 @@
         </button>
       </div>
 
-      <div v-if="hasSeriesScore" class="series">
-        <LucideTrophy class="icon" />
-        <span class="series-text">Tỉ số liên đấu</span>
-        <span class="num blue">{{ currentTankRoom.teamScores.blue }}</span>
-        <span class="sep">:</span>
-        <span class="num red">{{ currentTankRoom.teamScores.red }}</span>
+      <div class="round-status-bar">
+        <div class="round-badge">
+          <span class="round-pill">ROUND {{ currentTankRoom.currentRound }}</span>
+          <span class="match-pill">Chạm {{ currentTankRoom.matchesPerRound }} bàn thắng</span>
+        </div>
+        <div class="series">
+          <LucideTrophy class="icon" />
+          <span class="series-text">Tỉ số Round</span>
+          <span class="num blue">{{ currentTankRoom.teamScores.blue }}</span>
+          <span class="sep">:</span>
+          <span class="num red">{{ currentTankRoom.teamScores.red }}</span>
+        </div>
+        <button
+          v-if="currentTankRoom.roundHistory && currentTankRoom.roundHistory.length > 0"
+          type="button"
+          class="btn-round-history"
+          @click="showHistoryModal = true"
+        >
+          <LucideHistory class="icon" /> Lịch sử Round ({{ currentTankRoom.roundHistory.length }})
+        </button>
       </div>
 
       <div class="teams">
@@ -78,16 +92,16 @@
               v-if="myPlayer && myPlayer.team !== team.id"
               class="switch-btn"
               :class="team.id"
-              :disabled="teamCount(team.id) >= 2"
+              :disabled="teamCount(team.id) >= 3"
               @click="handleSwitchTeam(team.id)"
             >
-              {{ teamCount(team.id) >= 2 ? 'ĐÃ ĐẦY' : 'CHUYỂN QUA' }}
+              {{ teamCount(team.id) >= 3 ? 'ĐÃ ĐẦY' : 'CHUYỂN QUA' }}
             </button>
           </div>
 
           <div class="slots">
             <div
-              v-for="slot in 2"
+              v-for="slot in 3"
               :key="slot"
               class="slot"
               :class="{ occupied: playerAt(team.id, slot - 1) }"
@@ -129,7 +143,7 @@
 
       <div class="waiting-foot">
         <div class="foot-info">
-          <span class="foot-count"><LucideUsers class="icon" />{{ currentTankRoom.players.length }}/4 người chơi</span>
+          <span class="foot-count"><LucideUsers class="icon" />{{ currentTankRoom.players.length }}/{{ currentTankRoom.maxPlayers || 6 }} người chơi</span>
           <span v-if="isHost && startHint" class="foot-hint">{{ startHint }}</span>
           <span v-else-if="!isHost" class="foot-hint">Chờ chủ phòng bắt đầu trận đấu</span>
         </div>
@@ -161,6 +175,7 @@
     >
       <template #icon><component :is="isJoinMode ? LucideDoorOpen : LucidePlus" /></template>
       <form class="name-form" @submit.prevent="submitName">
+        <label class="form-label">Tên người chơi:</label>
         <input
           ref="nameInputRef"
           v-model="inputPlayerName"
@@ -170,6 +185,24 @@
           maxlength="24"
           autocomplete="off"
         />
+
+        <div v-if="!isJoinMode" class="round-select-group">
+          <label class="form-label">Mục tiêu bàn thắng mỗi Round:</label>
+          <div class="round-options">
+            <button
+              v-for="count in [3, 5, 10, 15]"
+              :key="count"
+              type="button"
+              class="round-opt-btn"
+              :class="{ active: selectedMatchesPerRound === count }"
+              @click="selectedMatchesPerRound = count"
+            >
+              Chạm {{ count }}
+            </button>
+          </div>
+          <span class="round-hint">Đội nào chạm {{ selectedMatchesPerRound }} bàn thắng trước sẽ thắng Round đó (ví dụ {{ selectedMatchesPerRound }} - {{ Math.max(0, selectedMatchesPerRound - 1) }}). Sau đó tỉ số sẽ reset về 0 - 0 để sang Round mới.</span>
+        </div>
+
         <p v-if="formError" class="form-error"><LucideShieldAlert class="icon" />{{ formError }}</p>
       </form>
       <template #actions>
@@ -177,6 +210,45 @@
         <button class="tm-btn primary" :disabled="!inputPlayerName.trim() || submitting" @click="submitName">
           <LucideCheck />XÁC NHẬN
         </button>
+      </template>
+    </TankModal>
+
+    <!-- Round History modal -->
+    <TankModal
+      v-if="showHistoryModal"
+      title="LỊCH SỬ CÁC ROUND"
+      :subtitle="`Phòng ${currentTankRoom?.roomCode} • Đã hoàn thành ${currentTankRoom?.roundHistory?.length || 0} round`"
+      tone="neutral"
+      @close="showHistoryModal = false"
+    >
+      <template #icon><LucideHistory /></template>
+      <div class="round-history-list">
+        <div
+          v-for="rh in currentTankRoom?.roundHistory"
+          :key="rh.round"
+          class="rh-card"
+          :class="rh.winner"
+        >
+          <div class="rh-header">
+            <span class="rh-round">ROUND {{ rh.round }}</span>
+            <span class="rh-time">{{ formatTime(rh.finishedAt) }}</span>
+          </div>
+          <div class="rh-body">
+            <div class="rh-winner">
+              <span v-if="rh.winner === 'draw'" class="tag-draw">HÒA</span>
+              <span v-else-if="rh.winner === 'blue'" class="tag-blue">ĐỘI XANH THẮNG</span>
+              <span v-else class="tag-red">ĐỘI ĐỎ THẮNG</span>
+            </div>
+            <div class="rh-score">
+              <span class="num blue">{{ rh.blueScore }}</span>
+              <span class="sep">-</span>
+              <span class="num red">{{ rh.redScore }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #actions>
+        <button class="tm-btn primary" @click="showHistoryModal = false">ĐÓNG</button>
       </template>
     </TankModal>
 
@@ -228,7 +300,8 @@ import {
   LucideArrowRight,
   LucideTrophy,
   LucideCrown,
-  LucideWifiOff
+  LucideWifiOff,
+  LucideHistory
 } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTankSocket } from '~/composables/useTankSocket'
@@ -261,6 +334,8 @@ const showNameModal = ref(false)
 const isJoinMode = ref(false)
 const targetRoomCode = ref('')
 const inputPlayerName = ref('')
+const selectedMatchesPerRound = ref(5)
+const showHistoryModal = ref(false)
 const formError = ref('')
 const submitting = ref(false)
 const copied = ref(false)
@@ -307,6 +382,18 @@ const hasSeriesScore = computed(() => {
   return !!s && (s.blue > 0 || s.red > 0)
 })
 
+const currentMatchIndex = computed(() => {
+  const scores = currentTankRoom.value?.teamScores
+  const total = scores ? scores.blue + scores.red : 0
+  return total + 1
+})
+
+function formatTime(timestamp: number) {
+  if (!timestamp) return ''
+  const d = new Date(timestamp)
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
 function teamCount(team: Team) {
   return currentTankRoom.value?.players.filter((p) => p.team === team).length ?? 0
 }
@@ -333,6 +420,7 @@ const canStartGame = computed(() => !!currentTankRoom.value && !startHint.value)
 function openCreate() {
   isJoinMode.value = false
   targetRoomCode.value = ''
+  selectedMatchesPerRound.value = 5
   openNameModal()
 }
 
@@ -359,7 +447,9 @@ async function submitName() {
   submitting.value = true
   formError.value = ''
   try {
-    const res = isJoinMode.value ? await joinRoom(targetRoomCode.value, name) : await createRoom(name)
+    const res = isJoinMode.value
+      ? await joinRoom(targetRoomCode.value, name)
+      : await createRoom(name, selectedMatchesPerRound.value)
     if (!res.ok) {
       formError.value = res.error?.message || (isJoinMode.value ? 'Không thể tham gia phòng.' : 'Không thể tạo phòng.')
       if (isJoinMode.value) void listRooms()
@@ -573,6 +663,180 @@ function copyRoomCode() {
 .num.blue { color: #38bdf8; }
 .num.red { color: #ef4444; }
 .series .sep { color: var(--text-faint); }
+
+.round-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+.round-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Orbitron', sans-serif;
+}
+.round-pill {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0f172a;
+  font-weight: 900;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+}
+.match-pill {
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+.btn-round-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-round-history:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+}
+.btn-round-history .icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Round selector in Modal */
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.round-select-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.round-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.round-opt-btn {
+  padding: 8px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.round-opt-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.round-opt-btn.active {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: var(--matchbox-amber);
+  color: var(--matchbox-amber);
+  font-weight: 800;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+.round-hint {
+  font-size: 0.76rem;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* Round History List */
+.round-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.rh-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.rh-card.blue {
+  border-left: 4px solid #38bdf8;
+}
+.rh-card.red {
+  border-left: 4px solid #ef4444;
+}
+.rh-card.draw {
+  border-left: 4px solid #94a3b8;
+}
+.rh-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+}
+.rh-round {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 800;
+  color: var(--matchbox-gold);
+}
+.rh-time {
+  color: var(--text-faint);
+}
+.rh-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.rh-winner {
+  font-size: 0.85rem;
+  font-weight: 800;
+  font-family: 'Orbitron', sans-serif;
+}
+.tag-blue {
+  color: #38bdf8;
+}
+.tag-red {
+  color: #ef4444;
+}
+.tag-draw {
+  color: #94a3b8;
+}
+.rh-score {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .team-box {

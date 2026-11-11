@@ -4,8 +4,8 @@ import { createGame, MAX_LIVES } from '../core/tankEngine.js';
 import { PVP_MAP_NAMES } from '../core/tankMaps.js';
 
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const MAX_PLAYERS = 4;
-const MAX_PER_TEAM = 2;
+const MAX_PLAYERS = 6;
+const MAX_PER_TEAM = 3;
 const MAX_NAME_LENGTH = 24;
 
 // How long a dropped player keeps their seat before being removed.
@@ -289,7 +289,7 @@ export function joinTankRoom(roomCode, playerName, socketId) {
   const room = getTankRoom(roomCode);
   if (!room) return { error: 'ROOM_NOT_FOUND', message: 'Phòng không tồn tại hoặc đã bị hủy.' };
   if (room.status !== 'LOBBY') return { error: 'GAME_ALREADY_STARTED', message: 'Trận đấu đang diễn ra.' };
-  if (room.players.length >= MAX_PLAYERS) return { error: 'ROOM_FULL', message: 'Phòng đã đủ 4 người chơi.' };
+  if (room.players.length >= MAX_PLAYERS) return { error: 'ROOM_FULL', message: 'Phòng đã đủ 6 người chơi.' };
 
   const blueCount = room.players.filter((p) => p.team === 'blue').length;
   const redCount = room.players.filter((p) => p.team === 'red').length;
@@ -333,7 +333,7 @@ export function switchTankTeam(socketId, targetTeam) {
 
   const targetCount = room.players.filter((p) => p.team === targetTeam).length;
   if (targetCount >= MAX_PER_TEAM) {
-    return { error: 'TEAM_FULL', message: `Đội ${targetTeam === 'blue' ? 'Xanh' : 'Đỏ'} đã đủ 2 người.` };
+    return { error: 'TEAM_FULL', message: `Đội ${targetTeam === 'blue' ? 'Xanh' : 'Đỏ'} đã đủ 3 người.` };
   }
 
   player.team = targetTeam;
